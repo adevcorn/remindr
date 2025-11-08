@@ -4,6 +4,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from typing import Optional, Dict, Any
 from datetime import datetime
+import asyncio
+
 from app.models.capture import DraftType
 
 
@@ -43,31 +45,36 @@ class GoogleSyncService:
         Returns:
             Tuple of (task_id, error_message)
         """
-        try:
-            service = self._get_tasks_service(credentials)
-            
-            task_body = {
-                'title': title,
-                'notes': description or '',
-                'status': 'needsAction'
-            }
-            
-            if due_date:
-                # Google Tasks expects RFC 3339 timestamp
-                task_body['due'] = due_date.isoformat()
-            
-            result = service.tasks().insert(
-                tasklist=task_list_id,
-                body=task_body
-            ).execute()
-            
-            return result.get('id'), None
+        def _sync_task_blocking():
+            """Blocking I/O operation to sync task."""
+            try:
+                service = self._get_tasks_service(credentials)
+                
+                task_body = {
+                    'title': title,
+                    'notes': description or '',
+                    'status': 'needsAction'
+                }
+                
+                if due_date:
+                    # Google Tasks expects RFC 3339 timestamp
+                    task_body['due'] = due_date.isoformat()
+                
+                result = service.tasks().insert(
+                    tasklist=task_list_id,
+                    body=task_body
+                ).execute()
+                
+                return result.get('id'), None
 
-        except HttpError as e:
-            error_msg = f"Google Tasks API error: {e.resp.status} - {e.error_details}"
-            return None, error_msg
-        except Exception as e:
-            return None, str(e)
+            except HttpError as e:
+                error_msg = f"Google Tasks API error: {e.resp.status} - {e.error_details}"
+                return None, error_msg
+            except Exception as e:
+                return None, str(e)
+        
+        # Run blocking call in thread pool
+        return await asyncio.to_thread(_sync_task_blocking)
 
     async def sync_event(
         self,
@@ -94,43 +101,46 @@ class GoogleSyncService:
         Returns:
             Tuple of (event_id, error_message)
         """
-        try:
-            service = self._get_calendar_service(credentials)
-            
-            # Default to 1-hour event if times not specified
-            if not start_time:
-                start_time = datetime.now()
-            if not end_time:
-                end_time = start_time.replace(hour=start_time.hour + 1)
-            
-            event_body = {
-                'summary': title,
-                'description': description or '',
-                'start': {
-                    'dateTime': start_time.isoformat(),
-                    'timeZone': 'UTC'
-                },
-                'end': {
-                    'dateTime': end_time.isoformat(),
-                    'timeZone': 'UTC'
+        def _sync_event_blocking():
+            """Blocking I/O operation to sync event."""
+            try:
+                service = self._get_calendar_service(credentials)
+                
+                # Default to 1-hour event if times not specified
+                event_start = start_time or datetime.now()
+                event_end = end_time or event_start.replace(hour=event_start.hour + 1)
+                
+                event_body = {
+                    'summary': title,
+                    'description': description or '',
+                    'start': {
+                        'dateTime': event_start.isoformat(),
+                        'timeZone': 'UTC'
+                    },
+                    'end': {
+                        'dateTime': event_end.isoformat(),
+                        'timeZone': 'UTC'
+                    }
                 }
-            }
-            
-            if location:
-                event_body['location'] = location
-            
-            result = service.events().insert(
-                calendarId=calendar_id,
-                body=event_body
-            ).execute()
-            
-            return result.get('id'), None
+                
+                if location:
+                    event_body['location'] = location
+                
+                result = service.events().insert(
+                    calendarId=calendar_id,
+                    body=event_body
+                ).execute()
+                
+                return result.get('id'), None
 
-        except HttpError as e:
-            error_msg = f"Google Calendar API error: {e.resp.status} - {e.error_details}"
-            return None, error_msg
-        except Exception as e:
-            return None, str(e)
+            except HttpError as e:
+                error_msg = f"Google Calendar API error: {e.resp.status} - {e.error_details}"
+                return None, error_msg
+            except Exception as e:
+                return None, str(e)
+        
+        # Run blocking call in thread pool
+        return await asyncio.to_thread(_sync_event_blocking)
 
     async def update_task(
         self,
@@ -148,35 +158,40 @@ class GoogleSyncService:
         Returns:
             Error message if failed, None if successful
         """
-        try:
-            service = self._get_tasks_service(credentials)
-            
-            # Get existing task first
-            task = service.tasks().get(
-                tasklist=task_list_id,
-                task=task_id
-            ).execute()
-            
-            # Update fields
-            if title:
-                task['title'] = title
-            if description:
-                task['notes'] = description
-            if due_date:
-                task['due'] = due_date.isoformat()
-            if status:
-                task['status'] = status
-            
-            service.tasks().update(
-                tasklist=task_list_id,
-                task=task_id,
-                body=task
-            ).execute()
-            
-            return None
+        def _update_task_blocking():
+            """Blocking I/O operation to update task."""
+            try:
+                service = self._get_tasks_service(credentials)
+                
+                # Get existing task first
+                task = service.tasks().get(
+                    tasklist=task_list_id,
+                    task=task_id
+                ).execute()
+                
+                # Update fields
+                if title:
+                    task['title'] = title
+                if description:
+                    task['notes'] = description
+                if due_date:
+                    task['due'] = due_date.isoformat()
+                if status:
+                    task['status'] = status
+                
+                service.tasks().update(
+                    tasklist=task_list_id,
+                    task=task_id,
+                    body=task
+                ).execute()
+                
+                return None
 
-        except Exception as e:
-            return str(e)
+            except Exception as e:
+                return str(e)
+        
+        # Run blocking call in thread pool
+        return await asyncio.to_thread(_update_task_blocking)
 
     async def delete_task(
         self,
@@ -190,15 +205,20 @@ class GoogleSyncService:
         Returns:
             Error message if failed, None if successful
         """
-        try:
-            service = self._get_tasks_service(credentials)
-            service.tasks().delete(
-                tasklist=task_list_id,
-                task=task_id
-            ).execute()
-            return None
-        except Exception as e:
-            return str(e)
+        def _delete_task_blocking():
+            """Blocking I/O operation to delete task."""
+            try:
+                service = self._get_tasks_service(credentials)
+                service.tasks().delete(
+                    tasklist=task_list_id,
+                    task=task_id
+                ).execute()
+                return None
+            except Exception as e:
+                return str(e)
+        
+        # Run blocking call in thread pool
+        return await asyncio.to_thread(_delete_task_blocking)
 
 
 # Singleton instance

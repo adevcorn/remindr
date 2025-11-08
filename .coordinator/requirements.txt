@@ -1,0 +1,8 @@
+# Coordinator Memory System - Python Dependencies
+# 
+# This implementation uses primarily the Python standard library.
+# No external dependencies are required for core functionality.
+#
+# For development and testing:
+pytest>=7.4.0  # For running unit tests
+pytest-cov>=4.1.0  # For test coverage reports

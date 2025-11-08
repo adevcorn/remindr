@@ -1,0 +1,39 @@
+# Kubernetes configuration for ConfigMaps and Secrets
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: remindr-config
+data:
+  google-cloud-project: "your-project-id"
+  ai-confidence-threshold: "0.85"
+  sync-retry-max-attempts: "5"
+  sync-retry-backoff-base: "2"
+  cors-origins: "https://yourdomain.com"
+
+---
+# Secret template - DO NOT commit actual values
+# Create secrets using: kubectl create secret generic remindr-secrets --from-literal=...
+apiVersion: v1
+kind: Secret
+metadata:
+  name: remindr-secrets
+type: Opaque
+stringData:
+  database-url: "postgresql://user:password@postgres-service:5432/remindr"
+  redis-url: "redis://redis-service:6379/0"
+  secret-key: "CHANGE_ME_IN_PRODUCTION"
+  google-client-id: "your-client-id.apps.googleusercontent.com"
+  google-client-secret: "your-client-secret"
+
+---
+# Google Service Account Secret
+# Create using: kubectl create secret generic google-service-account --from-file=service-account.json=path/to/key.json
+apiVersion: v1
+kind: Secret
+metadata:
+  name: google-service-account
+type: Opaque
+data:
+  service-account.json: |
+    # Base64 encoded service account JSON
+    # Use: cat service-account.json | base64 -w 0

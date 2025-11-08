@@ -1,5 +1,6 @@
 """Speech-to-text service using Google Cloud Speech API."""
 import base64
+import asyncio
 from google.cloud import speech_v1
 from google.cloud.speech_v1 import types
 from typing import Optional
@@ -28,31 +29,36 @@ class SpeechToTextService:
         Returns:
             Tuple of (transcribed_text, confidence_score)
         """
-        audio = types.RecognitionAudio(content=audio_data)
-        config = types.RecognitionConfig(
-            encoding=types.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=16000,
-            language_code=language_code,
-            enable_automatic_punctuation=True,
-            model="latest_long"
-        )
+        def _transcribe_blocking():
+            """Blocking I/O operation for speech recognition."""
+            audio = types.RecognitionAudio(content=audio_data)
+            config = types.RecognitionConfig(
+                encoding=types.RecognitionConfig.AudioEncoding.LINEAR16,
+                sample_rate_hertz=16000,
+                language_code=language_code,
+                enable_automatic_punctuation=True,
+                model="latest_long"
+            )
 
-        try:
-            response = self.client.recognize(config=config, audio=audio)
-            
-            if not response.results:
-                return None, 0.0
-            
-            # Get the first result with highest confidence
-            result = response.results[0]
-            if not result.alternatives:
-                return None, 0.0
-            
-            alternative = result.alternatives[0]
-            return alternative.transcript, alternative.confidence
+            try:
+                response = self.client.recognize(config=config, audio=audio)
+                
+                if not response.results:
+                    return None, 0.0
+                
+                # Get the first result with highest confidence
+                result = response.results[0]
+                if not result.alternatives:
+                    return None, 0.0
+                
+                alternative = result.alternatives[0]
+                return alternative.transcript, alternative.confidence
 
-        except Exception as e:
-            raise Exception(f"Speech-to-text failed: {str(e)}")
+            except Exception as e:
+                raise Exception(f"Speech-to-text failed: {str(e)}")
+        
+        # Run blocking call in thread pool
+        return await asyncio.to_thread(_transcribe_blocking)
 
 
 # Singleton instance

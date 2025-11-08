@@ -21,6 +21,8 @@ class Capture {
   final String? rawText;
   final String? audioUrl;
   final String? imageUrl;
+  final String? audioData;  // Base64 encoded audio for upload
+  final String? imageData;  // Base64 encoded image for upload
   final double? aiConfidence;
   final String? errorMessage;
   final int retryCount;
@@ -36,6 +38,8 @@ class Capture {
     this.rawText,
     this.audioUrl,
     this.imageUrl,
+    this.audioData,
+    this.imageData,
     this.aiConfidence,
     this.errorMessage,
     this.retryCount = 0,
@@ -53,6 +57,8 @@ class Capture {
       'raw_text': rawText,
       'audio_url': audioUrl,
       'image_url': imageUrl,
+      'audio_data': audioData,
+      'image_data': imageData,
       'ai_confidence': aiConfidence,
       'error_message': errorMessage,
       'retry_count': retryCount,
@@ -75,6 +81,8 @@ class Capture {
       rawText: json['raw_text'],
       audioUrl: json['audio_url'],
       imageUrl: json['image_url'],
+      audioData: json['audio_data'],
+      imageData: json['image_data'],
       aiConfidence: json['ai_confidence']?.toDouble(),
       errorMessage: json['error_message'],
       retryCount: json['retry_count'] ?? 0,

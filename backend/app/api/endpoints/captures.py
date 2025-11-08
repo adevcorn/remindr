@@ -18,6 +18,7 @@ from app.services.speech_to_text import speech_service
 from app.services.ocr import ocr_service
 from app.services.nlp import nlp_service
 from app.core.config import settings
+from app.core.auth import get_current_user_id
 
 router = APIRouter()
 
@@ -26,7 +27,7 @@ router = APIRouter()
 async def create_capture(
     capture: CaptureCreate,
     db: Session = Depends(get_db),
-    user_id: str = "demo_user"  # TODO: Get from auth
+    user_id: str = Depends(get_current_user_id)
 ):
     """
     Create a new capture (voice, text, or image).
@@ -137,7 +138,7 @@ async def list_captures(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    user_id: str = "demo_user"
+    user_id: str = Depends(get_current_user_id)
 ):
     """List all captures for the user."""
     captures = db.query(Capture).filter(
@@ -150,7 +151,7 @@ async def list_captures(
 async def get_capture(
     capture_id: int,
     db: Session = Depends(get_db),
-    user_id: str = "demo_user"
+    user_id: str = Depends(get_current_user_id)
 ):
     """Get a specific capture."""
     capture = db.query(Capture).filter(
@@ -173,7 +174,7 @@ async def list_drafts(
     limit: int = 100,
     needs_review_only: bool = False,
     db: Session = Depends(get_db),
-    user_id: str = "demo_user"
+    user_id: str = Depends(get_current_user_id)
 ):
     """List all drafts for the user."""
     query = db.query(Draft).filter(Draft.user_id == user_id)
@@ -190,7 +191,7 @@ async def confirm_draft(
     draft_id: int,
     confirm: DraftConfirm,
     db: Session = Depends(get_db),
-    user_id: str = "demo_user"
+    user_id: str = Depends(get_current_user_id)
 ):
     """Confirm and optionally edit a draft."""
     draft = db.query(Draft).filter(

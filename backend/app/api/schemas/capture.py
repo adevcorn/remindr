@@ -1,16 +1,43 @@
 """Pydantic schemas for capture API."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Dict, Any
 from datetime import datetime
 from app.models.capture import CaptureType, CaptureState, DraftType
 
 
+# Size limits (in characters for base64 strings)
+MAX_TEXT_LENGTH = 5000
+MAX_AUDIO_SIZE = 10_000_000  # ~7.5MB of audio (base64 encoded)
+MAX_IMAGE_SIZE = 15_000_000  # ~11MB of image (base64 encoded)
+
+
 class CaptureCreate(BaseModel):
     """Schema for creating a new capture."""
     capture_type: CaptureType
-    raw_text: Optional[str] = None
-    audio_data: Optional[str] = None  # Base64 encoded audio
-    image_data: Optional[str] = None  # Base64 encoded image
+    raw_text: Optional[str] = Field(None, max_length=MAX_TEXT_LENGTH)
+    audio_data: Optional[str] = Field(None, max_length=MAX_AUDIO_SIZE)  # Base64 encoded audio
+    image_data: Optional[str] = Field(None, max_length=MAX_IMAGE_SIZE)  # Base64 encoded image
+
+    @field_validator('raw_text')
+    @classmethod
+    def validate_text(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError("Text cannot be empty")
+        return v
+
+    @field_validator('audio_data')
+    @classmethod
+    def validate_audio(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError("Audio data cannot be empty")
+        return v
+
+    @field_validator('image_data')
+    @classmethod
+    def validate_image(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v.strip()) == 0:
+            raise ValueError("Image data cannot be empty")
+        return v
 
 
 class CaptureResponse(BaseModel):
@@ -54,10 +81,10 @@ class DraftResponse(BaseModel):
 class DraftConfirm(BaseModel):
     """Schema for confirming a draft."""
     draft_id: int
-    title: Optional[str] = None  # Allow user to edit
-    description: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=500)  # Allow user to edit
+    description: Optional[str] = Field(None, max_length=5000)
     due_date: Optional[datetime] = None
-    priority: Optional[str] = None
+    priority: Optional[str] = Field(None, pattern="^(low|medium|high)$")
 
 
 class SyncStatus(BaseModel):

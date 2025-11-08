@@ -1,0 +1,483 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/elza-reference-dotnet/coordinator-memory-schema",
+  "title": "Coordinator Memory Schema",
+  "description": "Schema for multi-agent workflow coordinator state and memory",
+  "type": "object",
+  "required": [
+    "currentState",
+    "stateHistory",
+    "handoverLog",
+    "agentContext",
+    "pendingActions",
+    "blockers",
+    "metrics",
+    "projectKnowledge"
+  ],
+  "properties": {
+    "currentState": {
+      "type": "string",
+      "enum": [
+        "INIT",
+        "REQUIREMENTS",
+        "ARCHITECTURE",
+        "DEVELOPMENT",
+        "CI_CD",
+        "REVIEW",
+        "TESTING",
+        "PERFORMANCE",
+        "VALIDATION",
+        "COMPLETE"
+      ],
+      "description": "Current workflow state"
+    },
+    "currentFeature": {
+      "type": ["object", "null"],
+      "description": "Currently active feature being developed",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Feature name or identifier"
+        },
+        "branch": {
+          "type": "string",
+          "description": "Git branch name for this feature"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed feature description"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when feature work began"
+        },
+        "acceptanceCriteria": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of acceptance criteria for completion"
+        },
+        "linkedIssues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "GitHub issue numbers or URLs"
+        }
+      },
+      "required": ["name", "branch", "description", "startedAt"]
+    },
+    "stateHistory": {
+      "type": "array",
+      "description": "Historical record of all state transitions",
+      "items": {
+        "type": "object",
+        "required": ["fromState", "toState", "timestamp", "reason"],
+        "properties": {
+          "fromState": {
+            "type": "string",
+            "enum": [
+              "INIT",
+              "REQUIREMENTS",
+              "ARCHITECTURE",
+              "DEVELOPMENT",
+              "CI_CD",
+              "REVIEW",
+              "TESTING",
+              "PERFORMANCE",
+              "VALIDATION",
+              "COMPLETE"
+            ]
+          },
+          "toState": {
+            "type": "string",
+            "enum": [
+              "INIT",
+              "REQUIREMENTS",
+              "ARCHITECTURE",
+              "DEVELOPMENT",
+              "CI_CD",
+              "REVIEW",
+              "TESTING",
+              "PERFORMANCE",
+              "VALIDATION",
+              "COMPLETE"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "approved": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "handoverLog": {
+      "type": "array",
+      "description": "Complete log of all agent handovers",
+      "items": {
+        "type": "object",
+        "required": ["id", "timestamp", "fromAgent", "toAgent", "fromState", "toState", "reason", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique handover identifier"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fromAgent": {
+            "type": "string",
+            "enum": [
+              "Coordinator",
+              "Requirements Engineer",
+              "Tech Lead",
+              "Developer",
+              "DevOps Engineer",
+              "Reviewer",
+              "Tester / QA",
+              "Performance Engineer",
+              "Documentation Agent"
+            ]
+          },
+          "toAgent": {
+            "type": "string",
+            "enum": [
+              "Coordinator",
+              "Requirements Engineer",
+              "Tech Lead",
+              "Developer",
+              "DevOps Engineer",
+              "Reviewer",
+              "Tester / QA",
+              "Performance Engineer",
+              "Documentation Agent"
+            ]
+          },
+          "fromState": {
+            "type": "string",
+            "enum": [
+              "INIT",
+              "REQUIREMENTS",
+              "ARCHITECTURE",
+              "DEVELOPMENT",
+              "CI_CD",
+              "REVIEW",
+              "TESTING",
+              "PERFORMANCE",
+              "VALIDATION",
+              "COMPLETE"
+            ]
+          },
+          "toState": {
+            "type": "string",
+            "enum": [
+              "INIT",
+              "REQUIREMENTS",
+              "ARCHITECTURE",
+              "DEVELOPMENT",
+              "CI_CD",
+              "REVIEW",
+              "TESTING",
+              "PERFORMANCE",
+              "VALIDATION",
+              "COMPLETE"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "File paths, URLs, or references to work products"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["APPROVED", "REJECTED"],
+            "description": "Whether handover was approved"
+          },
+          "rejectionReason": {
+            "type": "string",
+            "description": "Explanation if handover was rejected"
+          }
+        }
+      }
+    },
+    "agentContext": {
+      "type": "object",
+      "description": "Map of agent name to their last output/status",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "lastActive": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["IDLE", "WORKING", "BLOCKED", "COMPLETE"]
+          },
+          "lastOutput": {
+            "type": "string"
+          },
+          "workProducts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "pendingActions": {
+      "type": "array",
+      "description": "Actions awaiting completion",
+      "items": {
+        "type": "object",
+        "required": ["id", "action", "owner", "createdAt"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueBy": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "IN_PROGRESS", "COMPLETE", "CANCELLED"]
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "description": "Current workflow blockers",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "impact", "createdAt"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+          },
+          "affectedState": {
+            "type": "string"
+          },
+          "affectedAgent": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolution": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["OPEN", "IN_PROGRESS", "RESOLVED"]
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Workflow metrics and analytics",
+      "properties": {
+        "totalFeatures": {
+          "type": "integer",
+          "description": "Total features completed"
+        },
+        "totalHandovers": {
+          "type": "integer"
+        },
+        "rejectedHandovers": {
+          "type": "integer"
+        },
+        "averageCycleTime": {
+          "type": "number",
+          "description": "Average time from INIT to COMPLETE in hours"
+        },
+        "stateCycleTimes": {
+          "type": "object",
+          "description": "Average time spent in each state",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "reworkPatterns": {
+          "type": "array",
+          "description": "Common backward transitions indicating rework",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fromState": {
+                "type": "string"
+              },
+              "toState": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "agentUtilization": {
+          "type": "object",
+          "description": "Time spent by each agent",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "projectKnowledge": {
+      "type": "object",
+      "description": "Learned patterns and conventions",
+      "properties": {
+        "conventions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "examples": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        },
+        "commonDecisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "situation": {
+                "type": "string"
+              },
+              "decision": {
+                "type": "string"
+              },
+              "rationale": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "successPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "antiPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "Historical record of coordinator decisions",
+      "items": {
+        "type": "object",
+        "required": ["id", "timestamp", "decision", "rationale"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "context": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "outcome": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
