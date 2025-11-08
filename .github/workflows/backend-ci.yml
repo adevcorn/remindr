@@ -109,8 +109,8 @@ jobs:
       run: |
         # Create fake Google credentials for tests
         echo '{"type": "service_account", "project_id": "test"}' > /tmp/fake-credentials.json
-        # Run tests with coverage
-        pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html || true
+        # Run tests with coverage - fail build if tests fail
+        pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4
