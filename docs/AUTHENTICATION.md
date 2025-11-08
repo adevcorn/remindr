@@ -2,17 +2,26 @@
 
 ## Overview
 
-Remindr uses a mobile-friendly OAuth flow with Google Sign-In. This approach is simpler and more reliable for mobile applications than traditional web-based OAuth redirects.
+Remindr uses a **two-phase authentication flow** that separates user authentication from Google API access:
+
+1. **Phase 1: Sign In with Google (ID Token Flow)** - Fast authentication using Google Sign-In SDK
+2. **Phase 2: Connect Google Services (OAuth Token Flow)** - Optional connection for Google Tasks/Calendar sync
+
+This approach provides better UX (immediate sign-in) while maintaining full OAuth capabilities for sync features.
 
 ## Architecture
 
-### Flow Diagram
+### Two-Phase Flow Diagram
 
 ```
 ┌─────────────┐         ┌──────────────┐         ┌─────────────┐
 │   Mobile    │         │   Backend    │         │   Google    │
 │     App     │         │    Server    │         │   OAuth     │
 └──────┬──────┘         └──────┬───────┘         └──────┬──────┘
+       │                       │                        │
+       │ ═══════════════════════════════════════════════│════════════
+       │ PHASE 1: SIGN IN (ID Token Authentication)    │
+       │ ═══════════════════════════════════════════════│════════════
        │                       │                        │
        │ 1. User taps         │                        │
        │    "Sign In"         │                        │
@@ -36,40 +45,98 @@ Remindr uses a mobile-friendly OAuth flow with Google Sign-In. This approach is 
        │                       │<───────────────────────┤
        │                       │                        │
        │                       │ 8. Create Session      │
-       │                       │    in Database         │
+       │                       │    (No OAuth tokens)   │
        │                       │                        │
        │ 9. Session Token      │                        │
        │<──────────────────────┤                        │
        │                       │                        │
-       │ 10. Store in          │                        │
-       │     Secure Storage    │                        │
+       │ 10. User is signed in │                        │
+       │     (can use app)     │                        │
+       │                       │                        │
+       │ ═══════════════════════════════════════════════│════════════
+       │ PHASE 2: CONNECT GOOGLE SERVICES (OAuth)      │
+       │ ═══════════════════════════════════════════════│════════════
+       │                       │                        │
+       │ 11. User taps         │                        │
+       │     "Connect Google"  │                        │
+       │                       │                        │
+       │ 12. GET /auth/connect-google                  │
+       │     Authorization:    │                        │
+       │     Bearer <session>  │                        │
+       ├──────────────────────>│                        │
+       │                       │                        │
+       │ 13. OAuth URL + State │                        │
+       │<──────────────────────┤                        │
+       │                       │                        │
+       │ 14. Open OAuth URL    │                        │
+       │     in browser        │                        │
+       ├──────────────────────────────────────────────>│
+       │                       │                        │
+       │                       │    15. User grants     │
+       │                       │        Calendar/Tasks  │
+       │                       │        permissions     │
+       │                       │                        │
+       │ 16. Redirect with code│                        │
+       │<──────────────────────────────────────────────┤
+       │                       │                        │
+       │ 17. GET /auth/callback?code=...&state=...     │
+       │                       │                        │
+       │                       │ 18. Exchange code      │
+       │                       │     for tokens         │
+       │                       ├───────────────────────>│
+       │                       │                        │
+       │                       │ 19. Access + Refresh   │
+       │                       │     tokens             │
+       │                       │<───────────────────────┤
+       │                       │                        │
+       │                       │ 20. Store tokens       │
+       │                       │     in User record     │
+       │                       │                        │
+       │ 21. Success response  │                        │
+       │<──────────────────────┤                        │
+       │                       │                        │
+       │ 22. Google sync       │                        │
+       │     now enabled       │                        │
        │                       │                        │
 ```
 
+## Why Two Phases?
+
+### Problem with Single-Phase OAuth
+- ID token verification is fast and simple (one API call)
+- Full OAuth flow requires browser redirects and is slower
+- Users want immediate app access, not permission dialogs
+
+### Solution: Separate Concerns
+1. **Phase 1 (ID Token)**: Proves user identity, creates session, user is signed in
+2. **Phase 2 (OAuth)**: Optional, only for users who want Google sync
+
+### Benefits
+- ✅ **Faster sign-in**: No OAuth redirect for basic auth
+- ✅ **Better UX**: Users can use app immediately, connect sync later
+- ✅ **Clear permissions**: Users understand they're granting Calendar/Tasks access
+- ✅ **Flexible**: Can add more integrations (Outlook, etc.) without changing auth
+- ✅ **Testable**: Can test app without Google API credentials
+
 ## Implementation Details
 
-### Mobile App (Flutter)
+### Phase 1: Sign In with Google (ID Token)
 
-**Location**: `mobile/lib/services/auth_service.dart`
+**Mobile App**: `mobile/lib/services/auth_service.dart`
 
 1. **Google Sign-In**: Uses Google Sign-In SDK to authenticate user client-side
 2. **ID Token Extraction**: Extracts ID token from authentication result
 3. **Backend Verification**: Sends ID token to backend `/auth/google-token` endpoint
-4. **Session Storage**: Stores returned session token in secure storage (FlutterSecureStorage)
-5. **API Authentication**: Uses session token in Authorization header for all API calls
+4. **Session Storage**: Stores returned session token in secure storage
+5. **API Authentication**: Uses session token for all API calls
 
 **Key Methods**:
 - `signInWithGoogle()`: Complete sign-in flow
-- `initialize()`: Restore session on app start, verify token validity
-- `signOut()`: Clear session locally and on backend
-- `handleUnauthorized()`: Clear session on 401 errors
-- `checkSessionValid()`: Check if session is still valid
+- `initialize()`: Restore session on app start
+- `signOut()`: Clear session
+- `handleUnauthorized()`: Handle 401 errors
 
-### Backend (FastAPI)
-
-**Location**: `backend/app/api/endpoints/auth.py`
-
-**Endpoints**:
+**Backend**: `backend/app/api/endpoints/auth.py`
 
 #### `POST /auth/google-token`
 Accepts Google ID token and returns session token.
@@ -92,14 +159,32 @@ Accepts Google ID token and returns session token.
 ```
 
 **Process**:
-1. Verify ID token with Google's servers using `google.oauth2.id_token.verify_oauth2_token()`
-2. Extract user info (user_id, email, name) from verified token
-3. Create or update User record in database
+1. Verify ID token with Google's servers
+2. Extract user info (user_id, email, name)
+3. Create or update User record (without OAuth tokens)
 4. Create Session record with 30-day expiry
-5. Return session token to mobile app
+5. Return session token
 
-#### `GET /auth/me`
-Get current user info (requires authentication).
+**Note**: OAuth tokens (google_access_token, google_refresh_token) are NOT populated in this phase.
+
+### Phase 2: Connect Google Services (OAuth)
+
+**Mobile App**: `mobile/lib/services/oauth_service.dart`
+
+**Flow**:
+1. User taps "Connect Google Services" button
+2. App calls `/auth/connect-google` to get OAuth URL
+3. App opens OAuth URL in browser/webview
+4. User grants Calendar & Tasks permissions
+5. Google redirects to `/auth/callback` with code
+6. Backend exchanges code for tokens and stores them
+7. App checks connection status
+8. Google sync is enabled
+
+**Backend Endpoints**:
+
+#### `GET /auth/connect-google`
+Initiate OAuth flow for authenticated user (requires session token).
 
 **Headers**:
 ```
@@ -109,27 +194,121 @@ Authorization: Bearer <session_token>
 **Response** (200 OK):
 ```json
 {
-  "user_id": "google_user_123",
+  "authorization_url": "https://accounts.google.com/o/oauth2/auth?...",
+  "state": "random_state_token"
+}
+```
+
+**Process**:
+1. Verify user is authenticated (session token required)
+2. Generate OAuth authorization URL with state parameter
+3. Store state with user_id for validation in callback
+4. Return OAuth URL to mobile app
+
+#### `GET /auth/callback?code=...&state=...`
+OAuth callback handler (handles both login and connect flows).
+
+**Query Parameters**:
+- `code`: Authorization code from Google
+- `state`: State parameter for CSRF protection
+
+**Response for Connect Flow** (200 OK):
+```json
+{
+  "success": true,
+  "message": "Google services connected successfully",
+  "email": "user@example.com"
+}
+```
+
+**Process**:
+1. Validate state parameter
+2. Exchange authorization code for access/refresh tokens
+3. Get user info from Google
+4. If state has user_id (connect flow):
+   - Verify email matches authenticated user
+   - Update user's OAuth tokens
+   - Return success message
+5. If state has no user_id (legacy login flow):
+   - Create/update user with tokens
+   - Create session
+   - Return session token
+
+#### `GET /auth/google-connection-status`
+Check if user has connected Google services (requires session token).
+
+**Headers**:
+```
+Authorization: Bearer <session_token>
+```
+
+**Response** (200 OK):
+```json
+{
+  "connected": true,
   "email": "user@example.com",
-  "name": "User Name",
-  "created_at": "2025-11-01T12:00:00Z",
-  "last_login_at": "2025-11-08T10:30:00Z"
+  "has_tasks_scope": true,
+  "has_calendar_scope": true
 }
 ```
 
-#### `POST /auth/logout`
-Revoke current session (requires authentication).
+**Process**:
+1. Look up user from session token
+2. Check if google_access_token and google_refresh_token exist
+3. Parse google_scopes to check which services are connected
+4. Return connection status
 
-**Headers**:
-```
-Authorization: Bearer <session_token>
-```
+### User Experience Flow
 
-**Response** (200 OK):
-```json
-{
-  "message": "Logged out successfully"
-}
+1. **First Launch**:
+   - User opens app
+   - Sees "Sign In with Google" button
+   - Taps button → Google Sign-In SDK → Signed in (Phase 1)
+   - Sees home screen with orange banner: "Connect Google Calendar & Tasks to sync"
+
+2. **Connect Google Services**:
+   - User taps "Connect Google Services" button
+   - Browser/webview opens with Google OAuth consent screen
+   - User grants Calendar & Tasks permissions
+   - Redirects back to app
+   - Banner changes to green: "Google Calendar & Tasks connected"
+   - Captures now sync to Google
+
+3. **Subsequent Launches**:
+   - User opens app
+   - Session restored automatically
+   - If connected, green banner shows
+   - If not connected, orange banner shows (can connect anytime)
+
+### Mobile UI Components
+
+**Home Screen Banner** (`mobile/lib/screens/home_screen.dart`):
+
+```dart
+// Before connection - orange banner
+Card(
+  color: Colors.orange.shade50,
+  child: Column(
+    children: [
+      Text('Connect Google Calendar & Tasks to sync your captures'),
+      ElevatedButton(
+        onPressed: _connectGoogleServices,
+        child: Text('Connect Google Services'),
+      ),
+    ],
+  ),
+)
+
+// After connection - green banner
+Card(
+  color: Colors.green.shade50,
+  child: Row(
+    children: [
+      Icon(Icons.check_circle, color: Colors.green),
+      Text('Google Calendar & Tasks connected'),
+    ],
+  ),
+)
 ```
 
 ### Session Management

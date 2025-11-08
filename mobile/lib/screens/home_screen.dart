@@ -9,6 +9,7 @@ import 'dart:io';
 import '../services/local_database.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/oauth_service.dart';
 import '../models/capture.dart';
 import 'login_screen.dart';
 
@@ -26,11 +27,76 @@ class _HomeScreenState extends State<HomeScreen> {
   
   bool _isRecording = false;
   String? _recordingPath;
+  bool _isGoogleConnected = false;
+  bool _isCheckingConnection = true;
+  OAuthService? _oAuthService;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeOAuthService();
+    _checkGoogleConnection();
+  }
+
+  void _initializeOAuthService() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    _oAuthService = OAuthService(apiService);
+  }
+
+  Future<void> _checkGoogleConnection() async {
+    if (_oAuthService == null) return;
+    
+    try {
+      final connected = await _oAuthService!.checkConnectionStatus();
+      if (mounted) {
+        setState(() {
+          _isGoogleConnected = connected;
+          _isCheckingConnection = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCheckingConnection = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _connectGoogleServices() async {
+    if (_oAuthService == null) return;
+
+    try {
+      final success = await _oAuthService!.connectGoogleServices(context);
+      
+      if (mounted) {
+        setState(() {
+          _isGoogleConnected = success;
+        });
+
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Google Calendar & Tasks connected!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to connect: $e')),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
     _textController.dispose();
     _audioRecorder.dispose();
+    _oAuthService?.dispose();
     super.dispose();
   }
 
@@ -396,6 +462,66 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
+            // Google Connection Banner
+            if (!_isCheckingConnection && !_isGoogleConnected)
+              Card(
+                color: Colors.orange.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.orange.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Connect Google Calendar & Tasks to sync your captures',
+                              style: TextStyle(
+                                color: Colors.orange.shade900,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton.icon(
+                        onPressed: _connectGoogleServices,
+                        icon: const Icon(Icons.link),
+                        label: const Text('Connect Google Services'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (_isGoogleConnected)
+              Card(
+                color: Colors.green.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Google Calendar & Tasks connected',
+                          style: TextStyle(
+                            color: Colors.green.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 20),
             const Text(
               'Quick Capture',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),

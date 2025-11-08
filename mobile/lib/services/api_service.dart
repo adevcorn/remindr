@@ -29,6 +29,23 @@ class ApiService {
     onUnauthorized?.call();
   }
 
+  // Generic GET request
+  Future<Map<String, dynamic>> get(String path) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl$path'),
+      headers: _headers,
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else if (response.statusCode == 401) {
+      _handleUnauthorized();
+      throw Exception('Authentication required');
+    } else {
+      throw Exception('Request failed: ${response.body}');
+    }
+  }
+
   // Capture endpoints
   Future<Capture> createCapture(Capture capture) async {
     final response = await http.post(
