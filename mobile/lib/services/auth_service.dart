@@ -1,4 +1,24 @@
-"""Authentication service for Google OAuth and session management."""
+"""
+Authentication service for Google OAuth and session management.
+
+This service implements a mobile-friendly OAuth flow:
+1. Uses Google Sign-In SDK for client-side authentication
+2. Extracts ID token from Google Sign-In result
+3. Sends ID token to backend for verification
+4. Backend verifies token and returns a session token
+5. Session token is stored securely and used for all API calls
+
+Session Management:
+- Sessions expire after 30 days (configured on backend)
+- When expired, user must sign in again (acceptable for MVP)
+- 401 responses trigger automatic session cleanup
+- Tokens are stored securely using FlutterSecureStorage
+
+Security:
+- ID tokens are verified by backend with Google's servers
+- Session tokens are stored in secure storage (not plain text)
+- All API calls use Bearer token authentication
+"""
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -54,45 +74,47 @@ class AuthService {
   }
 
   /// Sign in with Google OAuth
+  /// 
+  /// This implements a mobile-friendly OAuth flow:
+  /// 1. Google Sign-In SDK handles authentication client-side
+  /// 2. We extract the ID token from the authentication result
+  /// 3. We send the ID token to our backend for verification
+  /// 4. Backend verifies the token with Google and returns a session token
+  /// 5. We store the session token for future API calls
+  /// 
+  /// Session tokens expire after 30 days. When expired, users must sign in again.
   Future<bool> signInWithGoogle() async {
     try {
-      // Sign in with Google
+      // Sign in with Google using the SDK
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         return false; // User canceled
       }
 
-      // Get auth code
+      // Get authentication details including ID token
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       
-      // Get authorization URL from backend
-      final loginResponse = await http.get(
-        Uri.parse('$baseUrl/auth/login'),
-      );
-
-      if (loginResponse.statusCode != 200) {
-        throw Exception('Failed to get authorization URL');
+      // Extract ID token
+      final idToken = googleAuth.idToken;
+      if (idToken == null) {
+        throw Exception('No ID token received from Google');
       }
 
-      final loginData = jsonDecode(loginResponse.body);
-      final state = loginData['state'];
-
-      // Exchange code for session token via backend
-      // Note: In production, this should use proper OAuth flow
-      // For now, we'll use the serverAuthCode if available
-      final serverAuthCode = googleAuth.serverAuthCode;
-      if (serverAuthCode == null) {
-        throw Exception('No server auth code received');
-      }
-
-      final callbackResponse = await http.get(
-        Uri.parse('$baseUrl/auth/callback?code=$serverAuthCode&state=$state'),
+      // Send ID token to backend for verification
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/google-token'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'id_token': idToken,
+        }),
       );
 
-      if (callbackResponse.statusCode == 200) {
-        final authData = jsonDecode(callbackResponse.body);
+      if (response.statusCode == 200) {
+        final authData = jsonDecode(response.body);
         
-        // Store session data
+        // Store session data securely
         _sessionToken = authData['session_token'];
         _userId = authData['user_id'];
         _email = authData['email'];
@@ -107,7 +129,7 @@ class AuthService {
 
         return true;
       } else {
-        throw Exception('OAuth callback failed: ${callbackResponse.body}');
+        throw Exception('Backend authentication failed: ${response.body}');
       }
     } catch (e) {
       print('Sign in error: $e');
@@ -152,7 +174,8 @@ class AuthService {
     await _secureStorage.delete(key: 'name');
   }
 
-  /// Verify token is still valid
+  /// Verify token is still valid by calling /me endpoint
+  /// If token is expired (401), clear session gracefully
   Future<bool> _verifyToken() async {
     if (_sessionToken == null) return false;
 
@@ -165,14 +188,34 @@ class AuthService {
         },
       );
 
-      return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        return true;
+      } else if (response.statusCode == 401) {
+        // Token expired or invalid - clear session gracefully
+        // This is expected behavior after 30 days
+        return false;
+      } else {
+        // Other error - assume invalid
+        return false;
+      }
     } catch (e) {
+      // Network error or other exception - assume invalid
       return false;
     }
   }
 
-  /// Handle 401 errors by clearing session
+  /// Handle 401 errors by clearing session and providing user feedback
+  /// Call this when API requests return 401 status
   Future<void> handleUnauthorized() async {
     await clearSession();
+    // Note: The calling code should show a message to the user:
+    // "Your session has expired. Please sign in again."
+  }
+
+  /// Check if the current session is still valid
+  /// Returns true if valid, false if expired or invalid
+  /// If false, caller should prompt user to sign in again
+  Future<bool> checkSessionValid() async {
+    return await _verifyToken();
   }
 }

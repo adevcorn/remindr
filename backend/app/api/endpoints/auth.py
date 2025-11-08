@@ -1,10 +1,25 @@
-"""Authentication endpoints for OAuth flow."""
+"""
+Authentication endpoints for OAuth flow.
+
+This module implements a mobile-friendly OAuth flow:
+1. Mobile app handles Google Sign-In client-side (using Google Sign-In SDK)
+2. Mobile app receives ID token from Google
+3. Mobile app sends ID token to backend /auth/google-token endpoint
+4. Backend verifies ID token with Google's servers
+5. Backend creates/updates user and returns session token
+6. Mobile app uses session token for all subsequent API calls
+
+Session tokens expire after 30 days (configurable). When expired, the user
+must sign in again with Google. This is acceptable for MVP.
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from google.oauth2 import id_token
+from google.auth.transport import requests
 from datetime import datetime, timedelta
 from typing import Optional
 import json
@@ -44,6 +59,11 @@ class LogoutResponse(BaseModel):
     message: str
 
 
+class GoogleTokenRequest(BaseModel):
+    """Request schema for Google ID token authentication."""
+    id_token: str
+
+
 def get_oauth_flow() -> Flow:
     """Create OAuth 2.0 flow."""
     client_config = {
@@ -63,6 +83,95 @@ def get_oauth_flow() -> Flow:
     )
     
     return flow
+
+
+@router.post("/google-token", response_model=AuthResponse)
+async def authenticate_with_google_token(
+    token_request: GoogleTokenRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Authenticate user with Google ID token (mobile-friendly flow).
+    
+    This endpoint accepts an ID token from Google Sign-In (client-side)
+    and verifies it with Google's servers. On success, it creates or updates
+    the user record and returns a session token.
+    
+    Flow:
+    1. Mobile app uses Google Sign-In SDK to authenticate
+    2. Mobile app receives ID token from Google
+    3. Mobile app sends ID token to this endpoint
+    4. Backend verifies token with Google
+    5. Backend creates/updates user and session
+    6. Backend returns session token for future API calls
+    """
+    try:
+        # Verify the ID token with Google
+        idinfo = id_token.verify_oauth2_token(
+            token_request.id_token,
+            requests.Request(),
+            settings.GOOGLE_CLIENT_ID
+        )
+        
+        # Verify the issuer
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Invalid token issuer')
+        
+        # Extract user information from verified token
+        google_user_id = idinfo['sub']
+        email = idinfo.get('email')
+        name = idinfo.get('name')
+        
+        if not email or not google_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get user info from token"
+            )
+        
+        # Create or update user
+        user = db.query(User).filter(User.email == email).first()
+        
+        if not user:
+            user = User(
+                user_id=google_user_id,
+                email=email,
+                name=name,
+                # Note: We don't get access/refresh tokens in this flow
+                # Google Tasks/Calendar sync will need to be handled separately
+                # or we can request additional scopes when needed
+                last_login_at=datetime.utcnow()
+            )
+            db.add(user)
+        else:
+            # Update existing user
+            user.last_login_at = datetime.utcnow()
+            if name and not user.name:
+                user.name = name
+        
+        db.commit()
+        db.refresh(user)
+        
+        # Create session (30-day expiry)
+        session_token = create_user_session(db, user.user_id, expires_hours=24 * 30)
+        
+        return AuthResponse(
+            session_token=session_token,
+            user_id=user.user_id,
+            email=user.email,
+            name=user.name
+        )
+        
+    except ValueError as e:
+        # Invalid token
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid ID token: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Authentication failed: {str(e)}"
+        )
 
 
 @router.get("/login")
