@@ -1,0 +1,223 @@
+"""Capture API endpoints."""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+import base64
+from datetime import datetime
+
+from app.api.schemas.capture import (
+    CaptureCreate,
+    CaptureResponse,
+    DraftResponse,
+    DraftConfirm,
+    SyncStatus
+)
+from app.db.session import get_db
+from app.models.capture import Capture, Draft, CaptureType, CaptureState
+from app.services.speech_to_text import speech_service
+from app.services.ocr import ocr_service
+from app.services.nlp import nlp_service
+from app.core.config import settings
+
+router = APIRouter()
+
+
+@router.post("/captures", response_model=CaptureResponse, status_code=status.HTTP_201_CREATED)
+async def create_capture(
+    capture: CaptureCreate,
+    db: Session = Depends(get_db),
+    user_id: str = "demo_user"  # TODO: Get from auth
+):
+    """
+    Create a new capture (voice, text, or image).
+    """
+    # Create capture record
+    db_capture = Capture(
+        user_id=user_id,
+        capture_type=capture.capture_type,
+        state=CaptureState.QUEUED,
+        raw_text=capture.raw_text
+    )
+    
+    db.add(db_capture)
+    db.commit()
+    db.refresh(db_capture)
+    
+    # Process asynchronously based on type
+    try:
+        if capture.capture_type == CaptureType.VOICE and capture.audio_data:
+            # Decode base64 audio
+            audio_bytes = base64.b64decode(capture.audio_data)
+            text, confidence = await speech_service.transcribe_audio(audio_bytes)
+            
+            db_capture.raw_text = text
+            db_capture.ai_confidence = confidence
+            db_capture.state = CaptureState.PROCESSING
+            
+        elif capture.capture_type == CaptureType.IMAGE and capture.image_data:
+            # Decode base64 image
+            image_bytes = base64.b64decode(capture.image_data)
+            text, confidence = await ocr_service.extract_text(image_bytes)
+            
+            db_capture.raw_text = text
+            db_capture.ai_confidence = confidence
+            db_capture.state = CaptureState.PROCESSING
+            
+        elif capture.capture_type == CaptureType.TEXT:
+            db_capture.state = CaptureState.PROCESSING
+        
+        db_capture.processed_at = datetime.utcnow()
+        db.commit()
+        db.refresh(db_capture)
+        
+        # Run NLP classification if we have text
+        if db_capture.raw_text:
+            await process_capture_nlp(db_capture.id, db)
+        
+    except Exception as e:
+        db_capture.state = CaptureState.ERROR
+        db_capture.error_message = str(e)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process capture: {str(e)}"
+        )
+    
+    return db_capture
+
+
+async def process_capture_nlp(capture_id: int, db: Session):
+    """Process capture with NLP to create draft."""
+    capture = db.query(Capture).filter(Capture.id == capture_id).first()
+    if not capture or not capture.raw_text:
+        return
+    
+    try:
+        # Classify and extract entities
+        draft_type, confidence, entities = await nlp_service.classify_and_extract(
+            capture.raw_text
+        )
+        
+        # Create draft
+        draft = Draft(
+            capture_id=capture.id,
+            user_id=capture.user_id,
+            draft_type=draft_type,
+            ai_confidence=confidence,
+            title=entities["title"],
+            description=entities["description"],
+            due_date=entities["due_date"],
+            priority=entities["priority"],
+            location=entities["location"],
+            start_time=entities["start_time"],
+            end_time=entities["end_time"],
+            extracted_entities=entities
+        )
+        
+        db.add(draft)
+        capture.state = CaptureState.PARSED
+        
+        # Auto-confirm if confidence is high enough
+        if confidence >= settings.AI_CONFIDENCE_THRESHOLD:
+            draft.is_confirmed = True
+            draft.sync_state = CaptureState.CONFIRMED
+        else:
+            capture.state = CaptureState.NEEDS_REVIEW
+        
+        db.commit()
+        
+    except Exception as e:
+        capture.state = CaptureState.ERROR
+        capture.error_message = f"NLP processing failed: {str(e)}"
+        db.commit()
+
+
+@router.get("/captures", response_model=List[CaptureResponse])
+async def list_captures(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    user_id: str = "demo_user"
+):
+    """List all captures for the user."""
+    captures = db.query(Capture).filter(
+        Capture.user_id == user_id
+    ).offset(skip).limit(limit).all()
+    return captures
+
+
+@router.get("/captures/{capture_id}", response_model=CaptureResponse)
+async def get_capture(
+    capture_id: int,
+    db: Session = Depends(get_db),
+    user_id: str = "demo_user"
+):
+    """Get a specific capture."""
+    capture = db.query(Capture).filter(
+        Capture.id == capture_id,
+        Capture.user_id == user_id
+    ).first()
+    
+    if not capture:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Capture not found"
+        )
+    
+    return capture
+
+
+@router.get("/drafts", response_model=List[DraftResponse])
+async def list_drafts(
+    skip: int = 0,
+    limit: int = 100,
+    needs_review_only: bool = False,
+    db: Session = Depends(get_db),
+    user_id: str = "demo_user"
+):
+    """List all drafts for the user."""
+    query = db.query(Draft).filter(Draft.user_id == user_id)
+    
+    if needs_review_only:
+        query = query.filter(Draft.is_confirmed == False)
+    
+    drafts = query.offset(skip).limit(limit).all()
+    return drafts
+
+
+@router.post("/drafts/{draft_id}/confirm", response_model=DraftResponse)
+async def confirm_draft(
+    draft_id: int,
+    confirm: DraftConfirm,
+    db: Session = Depends(get_db),
+    user_id: str = "demo_user"
+):
+    """Confirm and optionally edit a draft."""
+    draft = db.query(Draft).filter(
+        Draft.id == draft_id,
+        Draft.user_id == user_id
+    ).first()
+    
+    if not draft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Draft not found"
+        )
+    
+    # Update draft with user edits
+    if confirm.title:
+        draft.title = confirm.title
+    if confirm.description:
+        draft.description = confirm.description
+    if confirm.due_date:
+        draft.due_date = confirm.due_date
+    if confirm.priority:
+        draft.priority = confirm.priority
+    
+    draft.is_confirmed = True
+    draft.sync_state = CaptureState.CONFIRMED
+    
+    db.commit()
+    db.refresh(draft)
+    
+    return draft
