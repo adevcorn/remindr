@@ -7,6 +7,7 @@ import '../models/draft.dart';
 class ApiService {
   final String baseUrl;
   String? _authToken;
+  Function()? onUnauthorized;
 
   ApiService({this.baseUrl = 'http://localhost:8000/api/v1'});
 
@@ -14,10 +15,19 @@ class ApiService {
     _authToken = token;
   }
 
+  void clearAuthToken() {
+    _authToken = null;
+  }
+
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         if (_authToken != null) 'Authorization': 'Bearer $_authToken',
       };
+
+  void _handleUnauthorized() {
+    clearAuthToken();
+    onUnauthorized?.call();
+  }
 
   // Capture endpoints
   Future<Capture> createCapture(Capture capture) async {
@@ -29,6 +39,9 @@ class ApiService {
 
     if (response.statusCode == 201) {
       return Capture.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 401) {
+      _handleUnauthorized();
+      throw Exception('Authentication required');
     } else {
       throw Exception('Failed to create capture: ${response.body}');
     }
@@ -43,6 +56,9 @@ class ApiService {
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => Capture.fromJson(json)).toList();
+    } else if (response.statusCode == 401) {
+      _handleUnauthorized();
+      throw Exception('Authentication required');
     } else {
       throw Exception('Failed to load captures');
     }
@@ -56,6 +72,9 @@ class ApiService {
 
     if (response.statusCode == 200) {
       return Capture.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 401) {
+      _handleUnauthorized();
+      throw Exception('Authentication required');
     } else {
       throw Exception('Failed to load capture');
     }
@@ -80,6 +99,9 @@ class ApiService {
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
       return data.map((json) => Draft.fromJson(json)).toList();
+    } else if (response.statusCode == 401) {
+      _handleUnauthorized();
+      throw Exception('Authentication required');
     } else {
       throw Exception('Failed to load drafts');
     }
@@ -108,6 +130,9 @@ class ApiService {
 
     if (response.statusCode == 200) {
       return Draft.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode == 401) {
+      _handleUnauthorized();
+      throw Exception('Authentication required');
     } else {
       throw Exception('Failed to confirm draft');
     }

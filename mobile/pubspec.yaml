@@ -25,6 +25,7 @@ dependencies:
   google_sign_in: ^6.1.6
   googleapis: ^11.4.0
   googleapis_auth: ^1.4.1
+  flutter_secure_storage: ^9.0.0
   
   # Audio Recording
   record: ^5.0.4

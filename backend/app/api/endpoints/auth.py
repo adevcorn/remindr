@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 import json
+import secrets
 
 from app.db.session import get_db
 from app.models.user import User
@@ -16,6 +17,10 @@ from app.core.auth import create_user_session, get_current_user_id, revoke_sessi
 from pydantic import BaseModel
 
 router = APIRouter()
+
+# In-memory state store (use Redis in production)
+# Format: {state: expiry_timestamp}
+_oauth_states: dict[str, datetime] = {}
 
 # OAuth 2.0 scopes for Google Tasks and Calendar
 SCOPES = [
@@ -73,6 +78,12 @@ async def login():
         prompt='consent'  # Force consent to get refresh token
     )
     
+    # Store state with 5-minute expiry for CSRF protection
+    _oauth_states[state] = datetime.utcnow() + timedelta(minutes=5)
+    
+    # Clean up expired states
+    _cleanup_expired_states()
+    
     return {
         "authorization_url": authorization_url,
         "state": state
@@ -90,6 +101,24 @@ async def oauth_callback(
     Exchanges authorization code for tokens and creates user session.
     """
     try:
+        # Validate state parameter for CSRF protection
+        if not state or state not in _oauth_states:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or missing state parameter"
+            )
+        
+        # Check if state is expired
+        if _oauth_states[state] < datetime.utcnow():
+            del _oauth_states[state]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="State parameter expired"
+            )
+        
+        # Remove state after validation (one-time use)
+        del _oauth_states[state]
+        
         # Exchange authorization code for tokens
         flow = get_oauth_flow()
         flow.fetch_token(code=code)
@@ -163,8 +192,10 @@ async def logout(
     """
     Logout current user by revoking session.
     """
+    from app.models.user import Session as UserSession
+    
     # Get all sessions for user and revoke them
-    sessions = db.query(Session).filter(Session.user_id == user_id).all()
+    sessions = db.query(UserSession).filter(UserSession.user_id == user_id).all()
     
     for session in sessions:
         db.delete(session)
@@ -197,3 +228,11 @@ async def get_current_user_info(
         "created_at": user.created_at,
         "last_login_at": user.last_login_at
     }
+
+
+def _cleanup_expired_states():
+    """Remove expired OAuth states from memory."""
+    now = datetime.utcnow()
+    expired = [state for state, expiry in _oauth_states.items() if expiry < now]
+    for state in expired:
+        del _oauth_states[state]

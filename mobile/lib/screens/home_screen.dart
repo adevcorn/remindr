@@ -8,7 +8,9 @@ import 'dart:convert';
 import 'dart:io';
 import '../services/local_database.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../models/capture.dart';
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -37,9 +39,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final localDb = Provider.of<LocalDatabase>(context, listen: false);
     final apiService = Provider.of<ApiService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context, listen: false);
+
+    if (!authService.isAuthenticated) {
+      _showLoginRequired();
+      return;
+    }
 
     final capture = Capture(
-      userId: 'demo_user',
+      userId: authService.userId!,
       captureType: CaptureType.text,
       state: CaptureState.queued,
       rawText: _textController.text,
@@ -62,9 +70,13 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved offline: $e')),
-        );
+        if (e.toString().contains('Authentication required')) {
+          _showLoginRequired();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Saved offline: $e')),
+          );
+        }
       }
     }
   }
@@ -141,6 +153,13 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       if (path != null) {
+        final authService = Provider.of<AuthService>(context, listen: false);
+
+        if (!authService.isAuthenticated) {
+          _showLoginRequired();
+          return;
+        }
+
         // Read audio file and convert to base64
         final file = File(path);
         final bytes = await file.readAsBytes();
@@ -150,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final apiService = Provider.of<ApiService>(context, listen: false);
 
         final capture = Capture(
-          userId: 'demo_user',
+          userId: authService.userId!,
           captureType: CaptureType.voice,
           state: CaptureState.queued,
           audioData: base64Audio,
@@ -174,9 +193,13 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Saved offline: $e')),
-            );
+            if (e.toString().contains('Authentication required')) {
+              _showLoginRequired();
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Saved offline: $e')),
+              );
+            }
           }
         }
       }
@@ -242,6 +265,13 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (image != null) {
+        final authService = Provider.of<AuthService>(context, listen: false);
+
+        if (!authService.isAuthenticated) {
+          _showLoginRequired();
+          return;
+        }
+
         // Read image file and convert to base64
         final bytes = await image.readAsBytes();
         final base64Image = base64Encode(bytes);
@@ -250,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final apiService = Provider.of<ApiService>(context, listen: false);
 
         final capture = Capture(
-          userId: 'demo_user',
+          userId: authService.userId!,
           captureType: CaptureType.image,
           state: CaptureState.queued,
           imageData: base64Image,
@@ -271,9 +301,13 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Saved offline: $e')),
-            );
+            if (e.toString().contains('Authentication required')) {
+              _showLoginRequired();
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Saved offline: $e')),
+              );
+            }
           }
         }
       }
@@ -286,12 +320,76 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showLoginRequired() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Please sign in to continue')),
+    );
+
+    // Navigate to login screen
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => LoginScreen(
+          authService: Provider.of<AuthService>(context, listen: false),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleLogout() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final apiService = Provider.of<ApiService>(context, listen: false);
+
+    try {
+      await authService.signOut();
+      apiService.clearAuthToken();
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => LoginScreen(authService: authService),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logout failed: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Remindr'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          if (authService.isAuthenticated)
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'logout') {
+                  _handleLogout();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'profile',
+                  child: Text(authService.email ?? 'User'),
+                  enabled: false,
+                ),
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Text('Logout'),
+                ),
+              ],
+            ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
