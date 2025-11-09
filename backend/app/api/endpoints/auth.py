@@ -30,10 +30,6 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
-from app.core.auth import create_user_session, get_current_user_id, revoke_session
-from app.core.config import settings
-from app.db.session import get_db
-from app.models.user import User
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests
@@ -43,6 +39,12 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
+from app.core.auth import (create_user_session, get_current_user_id,
+                           revoke_session)
+from app.core.config import settings
+from app.db.session import get_db
+from app.models.user import User
 
 router = APIRouter()
 

@@ -4,9 +4,10 @@ import asyncio
 import base64
 from typing import Optional
 
-from app.core.config import settings
 from google.cloud import speech_v1
 from google.cloud.speech_v1 import types
+
+from app.core.config import settings
 
 
 class SpeechToTextService:

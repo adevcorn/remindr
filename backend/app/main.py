@@ -1,14 +1,15 @@
 """Main FastAPI application."""
 
-from app.api.endpoints import auth, captures
-from app.core.config import settings
-from app.db.base import Base
-from app.db.session import engine
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+
+from app.api.endpoints import auth, captures
+from app.core.config import settings
+from app.db.base import Base
+from app.db.session import engine
 
 # Create database tables
 Base.metadata.create_all(bind=engine)

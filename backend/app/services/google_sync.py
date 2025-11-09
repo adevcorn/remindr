@@ -4,10 +4,11 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from app.models.capture import DraftType
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from app.models.capture import DraftType
 
 
 class GoogleSyncService:

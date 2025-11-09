@@ -3,10 +3,12 @@
 import enum
 from datetime import datetime
 
-from app.db.base import Base
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, Integer, String, Text
+from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, Integer,
+                        String, Text)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
+
+from app.db.base import Base
 
 
 class CaptureType(str, enum.Enum):

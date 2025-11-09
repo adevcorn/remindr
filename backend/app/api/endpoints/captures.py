@@ -5,13 +5,11 @@ import logging
 from datetime import datetime
 from typing import List
 
-from app.api.schemas.capture import (
-    CaptureCreate,
-    CaptureResponse,
-    DraftConfirm,
-    DraftResponse,
-    SyncStatus,
-)
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.api.schemas.capture import (CaptureCreate, CaptureResponse,
+                                     DraftConfirm, DraftResponse, SyncStatus)
 from app.core.auth import get_current_user_credentials, get_current_user_id
 from app.core.config import settings
 from app.db.session import get_db
@@ -20,8 +18,6 @@ from app.services.nlp import nlp_service
 from app.services.ocr import ocr_service
 from app.services.speech_to_text import speech_service
 from app.services.tasks import sync_draft_to_google_with_retry
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 

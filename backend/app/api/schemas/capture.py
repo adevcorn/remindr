@@ -3,8 +3,9 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from app.models.capture import CaptureState, CaptureType, DraftType
 from pydantic import BaseModel, Field, field_validator
+
+from app.models.capture import CaptureState, CaptureType, DraftType
 
 # Size limits (in characters for base64 strings)
 MAX_TEXT_LENGTH = 5000

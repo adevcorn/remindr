@@ -5,12 +5,13 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from google.oauth2.credentials import Credentials
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.capture import CaptureState, Draft, DraftType
 from app.services.google_sync import google_sync_service
-from google.oauth2.credentials import Credentials
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 

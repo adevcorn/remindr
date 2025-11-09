@@ -10,8 +10,9 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from app.models.capture import DraftType
 from sentence_transformers import SentenceTransformer
+
+from app.models.capture import DraftType
 
 
 class NLPService:

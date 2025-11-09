@@ -4,13 +4,14 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 
+from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import Session as UserSession
 from app.models.user import User
-from fastapi import Depends, Header, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
 
 security = HTTPBearer(auto_error=False)
 
