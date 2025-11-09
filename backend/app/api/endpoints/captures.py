@@ -113,6 +113,12 @@ async def process_capture_nlp(capture_id: int, db: Session):
         )
 
         # Create draft
+        # Create serializable version of entities for JSON storage
+        serializable_entities = entities.copy()
+        for key in ["due_date", "start_time", "end_time"]:
+            if serializable_entities.get(key) is not None:
+                serializable_entities[key] = serializable_entities[key].isoformat()
+
         draft = Draft(
             capture_id=capture.id,
             user_id=capture.user_id,
@@ -125,7 +131,7 @@ async def process_capture_nlp(capture_id: int, db: Session):
             location=entities["location"],
             start_time=entities["start_time"],
             end_time=entities["end_time"],
-            extracted_entities=entities,
+            extracted_entities=serializable_entities,
         )
 
         db.add(draft)

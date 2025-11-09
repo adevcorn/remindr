@@ -328,11 +328,11 @@ class NLPService:
         date_time = self._extract_datetime(text)
         if date_time:
             if date_time["date"]:
-                entities["due_date"] = date_time["date"].isoformat()
+                entities["due_date"] = date_time["date"]
             if date_time["start_time"]:
-                entities["start_time"] = date_time["start_time"].isoformat()
+                entities["start_time"] = date_time["start_time"]
             if date_time["end_time"]:
-                entities["end_time"] = date_time["end_time"].isoformat()
+                entities["end_time"] = date_time["end_time"]
 
         # Extract priority
         priority = self._extract_priority(text)
