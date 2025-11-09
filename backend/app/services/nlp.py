@@ -221,36 +221,39 @@ class NLPService:
         ]
         has_strong_event = any(kw in text_lower for kw in strong_event_keywords)
 
-        # If it's a TASK action, boost task score VERY strongly
-        # This should override any event keywords (e.g., "schedule meeting" is TASK, not EVENT)
+        # Rule-based classification with explicit precedence
+        # Priority 1: Task action verbs ALWAYS indicate TASK
+        # "Call dentist", "Schedule meeting", "Buy groceries" are all TASKs
         if has_task_action:
-            task_similarity += 0.40  # VERY strong boost for action verbs
-            # Suppress event score if there's an action verb
-            event_similarity = max(0.0, event_similarity - 0.20)
-
-        # If it has event keywords but NO action verb, and has time, it's likely an event
-        elif has_strong_event and has_time:
-            event_similarity += 0.25  # Strong boost for clear events
-
-        # Note indicators (passive, reminder-like)
-        note_keywords = ["remember", "note", "don't forget", "keep in mind"]
-        has_note_keyword = any(kw in text_lower for kw in note_keywords)
-
-        if has_note_keyword:
-            note_similarity += 0.15  # Boost note score
-
-        # Determine winner
-        max_score = max(task_similarity, event_similarity, note_similarity)
-
-        if max_score == event_similarity:
-            draft_type = DraftType.EVENT
-            confidence = min(event_similarity, 1.0)
-        elif max_score == task_similarity:
             draft_type = DraftType.TASK
-            confidence = min(task_similarity, 1.0)
-        else:
+            confidence = min(task_similarity + 0.20, 1.0)  # Boost confidence
+
+        # Priority 2: Note keywords indicate NOTE
+        elif has_note_keyword := any(
+            kw in text_lower
+            for kw in ["remember", "note", "don't forget", "keep in mind", "important:"]
+        ):
             draft_type = DraftType.NOTE
-            confidence = min(note_similarity, 1.0)
+            confidence = min(note_similarity + 0.15, 1.0)
+
+        # Priority 3: Event keywords + time = EVENT
+        # Only if NO action verb and NO note keyword
+        elif has_strong_event and has_time:
+            draft_type = DraftType.EVENT
+            confidence = min(event_similarity + 0.20, 1.0)
+
+        # Fallback: Use highest similarity score
+        else:
+            max_score = max(task_similarity, event_similarity, note_similarity)
+            if max_score == event_similarity:
+                draft_type = DraftType.EVENT
+                confidence = min(event_similarity, 1.0)
+            elif max_score == task_similarity:
+                draft_type = DraftType.TASK
+                confidence = min(task_similarity, 1.0)
+            else:
+                draft_type = DraftType.NOTE
+                confidence = min(note_similarity, 1.0)
 
         # Normalize confidence to 0.0-1.0 range
         # Cosine similarity is -1 to 1, but we're seeing 0-1 range
