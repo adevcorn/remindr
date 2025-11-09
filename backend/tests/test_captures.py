@@ -2,48 +2,31 @@
 import pytest
 import uuid
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import base64
 
 from app.main import app
-from app.db.base import Base
 from app.db.session import get_db
 from app.models.user import User, Session as UserSession
 from app.core.auth import create_user_session
 
-# Test database
-SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base.metadata.create_all(bind=engine)
-
-
-def override_get_db():
-    """Override database dependency for testing."""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-client = TestClient(app)
+@pytest.fixture
+def client(db_session):
+    """Test client for API calls with overridden database."""
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass  # Session cleanup handled by db_session fixture
+    
+    app.dependency_overrides[get_db] = override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def test_db():
-    """Create test database."""
-    Base.metadata.create_all(bind=engine)
-    yield TestingSessionLocal()
-    Base.metadata.drop_all(bind=engine)
-
-
-@pytest.fixture
-def test_user(test_db):
+def test_user(db_session):
     """Create a test user."""
     # Generate unique IDs for this test
     unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
@@ -56,19 +39,19 @@ def test_user(test_db):
         google_access_token="test_token",
         google_refresh_token="test_refresh",
     )
-    test_db.add(user)
-    test_db.commit()
-    test_db.refresh(user)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
     return user
 
 
 @pytest.fixture
-def auth_token(test_db, test_user):
+def auth_token(db_session, test_user):
     """Create an auth token for testing."""
-    return create_user_session(test_db, test_user.user_id)
+    return create_user_session(db_session, test_user.user_id)
 
 
-def test_create_text_capture(test_db, auth_token):
+def test_create_text_capture(client, db_session, auth_token):
     """Test creating a text capture."""
     response = client.post(
         "/api/v1/captures/captures",
@@ -86,7 +69,7 @@ def test_create_text_capture(test_db, auth_token):
     assert data["state"] in ["queued", "processing"]
 
 
-def test_create_voice_capture(test_db, auth_token):
+def test_create_voice_capture(client, db_session, auth_token):
     """Test creating a voice capture."""
     # Create dummy audio data
     audio_bytes = b"fake audio data for testing"
@@ -104,7 +87,7 @@ def test_create_voice_capture(test_db, auth_token):
     assert response.status_code in [201, 500]  # May fail if Google API not configured
     
 
-def test_create_image_capture(test_db, auth_token):
+def test_create_image_capture(client, db_session, auth_token):
     """Test creating an image capture."""
     # Create dummy image data
     image_bytes = b"fake image data for testing"
@@ -122,7 +105,7 @@ def test_create_image_capture(test_db, auth_token):
     assert response.status_code in [201, 500]  # May fail if Google API not configured
 
 
-def test_create_capture_without_auth():
+def test_create_capture_without_auth(client):
     """Test that creating a capture without auth fails."""
     response = client.post(
         "/api/v1/captures/captures",
@@ -135,7 +118,7 @@ def test_create_capture_without_auth():
     assert response.status_code == 401
 
 
-def test_list_captures(test_db, auth_token):
+def test_list_captures(client, db_session, auth_token):
     """Test listing captures."""
     # Create a capture first
     client.post(
@@ -159,7 +142,7 @@ def test_list_captures(test_db, auth_token):
     assert len(data) >= 1
 
 
-def test_get_capture(test_db, auth_token):
+def test_get_capture(client, db_session, auth_token):
     """Test getting a specific capture."""
     # Create a capture first
     create_response = client.post(
@@ -184,7 +167,7 @@ def test_get_capture(test_db, auth_token):
     assert data["id"] == capture_id
 
 
-def test_input_validation_text_too_long(test_db, auth_token):
+def test_input_validation_text_too_long(client, db_session, auth_token):
     """Test that text input validation rejects oversized text."""
     # Create text exceeding MAX_TEXT_LENGTH (5000 characters)
     long_text = "a" * 6000
@@ -201,7 +184,7 @@ def test_input_validation_text_too_long(test_db, auth_token):
     assert response.status_code == 422  # Validation error
 
 
-def test_rate_limiting():
+def test_rate_limiting(client):
     """Test that rate limiting works."""
     # Note: This test may be flaky depending on rate limit settings
     # Make many requests rapidly
@@ -214,7 +197,7 @@ def test_rate_limiting():
     assert 429 in responses
 
 
-def test_health_check():
+def test_health_check(client):
     """Test health check endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
