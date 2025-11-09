@@ -27,9 +27,11 @@ class NLPService:
     """
 
     def __init__(self):
-        """Initialize lightweight NLP models."""
-        # Use efficient sentence transformer (80-100MB, ~100-200ms inference)
-        self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        """Initialize lightweight NLP models lazily."""
+        self._model = None
+        self._task_embeddings = None
+        self._event_embeddings = None
+        self._note_embeddings = None
 
         # Pre-compute embeddings for intent patterns (cached)
         self.task_patterns = [
@@ -65,19 +67,43 @@ class NLPService:
             "reference",
         ]
 
-        # Pre-compute pattern embeddings (done once at startup)
-        self.task_embeddings = self.model.encode(
-            self.task_patterns, convert_to_tensor=True
-        )
-        self.event_embeddings = self.model.encode(
-            self.event_patterns, convert_to_tensor=True
-        )
-        self.note_embeddings = self.model.encode(
-            self.note_patterns, convert_to_tensor=True
-        )
-
         # Confidence threshold for auto-filing (from PRD)
         self.auto_file_threshold = 0.85
+
+    @property
+    def model(self):
+        """Lazy-load the sentence transformer model."""
+        if self._model is None:
+            # Use efficient sentence transformer (80-100MB, ~100-200ms inference)
+            self._model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        return self._model
+
+    @property
+    def task_embeddings(self):
+        """Lazy-load task pattern embeddings."""
+        if self._task_embeddings is None:
+            self._task_embeddings = self.model.encode(
+                self.task_patterns, convert_to_tensor=True
+            )
+        return self._task_embeddings
+
+    @property
+    def event_embeddings(self):
+        """Lazy-load event pattern embeddings."""
+        if self._event_embeddings is None:
+            self._event_embeddings = self.model.encode(
+                self.event_patterns, convert_to_tensor=True
+            )
+        return self._event_embeddings
+
+    @property
+    def note_embeddings(self):
+        """Lazy-load note pattern embeddings."""
+        if self._note_embeddings is None:
+            self._note_embeddings = self.model.encode(
+                self.note_patterns, convert_to_tensor=True
+            )
+        return self._note_embeddings
 
     async def classify_and_extract(
         self, text: str

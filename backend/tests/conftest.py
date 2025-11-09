@@ -62,7 +62,17 @@ def mock_google_services():
             mock_speech_response.results = [mock_speech_result]
             mock_speech_client.recognize.return_value = mock_speech_response
             
-            yield {
-                "vision": mock_vision_client,
-                "speech": mock_speech_client
-            }
+            # Mock SentenceTransformer for NLP service
+            with patch("sentence_transformers.SentenceTransformer") as mock_st:
+                mock_model = MagicMock()
+                mock_st.return_value = mock_model
+                
+                # Mock encode to return dummy tensors
+                import numpy as np
+                mock_model.encode.return_value = np.array([[0.1, 0.2, 0.3]])
+                
+                yield {
+                    "vision": mock_vision_client,
+                    "speech": mock_speech_client,
+                    "nlp": mock_model
+                }
