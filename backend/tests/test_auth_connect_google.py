@@ -1,5 +1,6 @@
 """Tests for Connect Google Services flow."""
 import pytest
+import uuid
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from datetime import datetime, timedelta
@@ -27,10 +28,13 @@ def client(db_session):
 @pytest.fixture
 def test_user_with_session(db_session):
     """Create test user with valid session."""
+    # Generate unique user ID and email for each test
+    unique_id = str(uuid.uuid4())[:8]
+    
     # Create user without OAuth tokens
     user = User(
-        user_id="test_user_connect_123",
-        email="test_connect@example.com",
+        user_id=f"test_user_connect_{unique_id}",
+        email=f"test_connect_{unique_id}@example.com",
         name="Test User Connect",
         last_login_at=datetime.utcnow()
     )
@@ -94,10 +98,13 @@ def test_google_connection_status_not_connected(client, test_user_with_session):
 
 def test_google_connection_status_connected(client, db_session):
     """Test connection status for user with OAuth tokens."""
+    # Generate unique user ID and email
+    unique_id = str(uuid.uuid4())[:8]
+    
     # Create user with OAuth tokens
     user = User(
-        user_id="test_user_connected",
-        email="connected@example.com",
+        user_id=f"test_user_connected_{unique_id}",
+        email=f"connected_{unique_id}@example.com",
         name="Connected User",
         google_access_token="test_access_token",
         google_refresh_token="test_refresh_token",
@@ -119,7 +126,7 @@ def test_google_connection_status_connected(client, db_session):
     data = response.json()
     
     assert data["connected"] is True
-    assert data["email"] == "connected@example.com"
+    assert data["email"] == f"connected_{unique_id}@example.com"
     assert data["has_tasks_scope"] is True
     assert data["has_calendar_scope"] is True
 
@@ -178,10 +185,13 @@ def test_callback_connect_flow(mock_build, mock_flow_class, client, db_session, 
 
 def test_callback_connect_flow_email_mismatch(client, db_session):
     """Test callback rejects connect flow if email doesn't match."""
+    # Generate unique user ID and email
+    unique_id = str(uuid.uuid4())[:8]
+    
     # Create user
     user = User(
-        user_id="test_user_mismatch",
-        email="original@example.com",
+        user_id=f"test_user_mismatch_{unique_id}",
+        email=f"original_{unique_id}@example.com",
         name="Test User",
         last_login_at=datetime.utcnow()
     )
