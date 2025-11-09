@@ -177,31 +177,36 @@ class NLPService:
         # Rule-based boosting for clear indicators
         text_lower = text.lower()
 
-        # Event indicators (meetings, appointments, time-based)
-        event_keywords = [
+        # Event indicators (meetings, appointments with specific time/date)
+        # Strong event indicators: meetings, appointments, scheduled activities WITH time
+        strong_event_keywords = [
             "meeting",
-            "appointment",
-            "call",
+            "appointment", 
             "conference",
-            "lunch",
-            "dinner",
+            "lunch with",
+            "dinner with",
             "party",
-            "event",
-            "scheduled",
-            "at ",
-            "tomorrow at",
-            "today at",
         ]
-        has_event_keyword = any(kw in text_lower for kw in event_keywords)
+        
+        # Check for time patterns
         has_time = self._has_time_pattern(text)
+        has_strong_event = any(kw in text_lower for kw in strong_event_keywords)
+        
+        # "Schedule" + meeting/call + time = EVENT, not TASK
+        # "Call dentist at 2pm" = EVENT (has time)
+        # "Call dentist" = TASK (no time)
+        is_scheduling_event = ("schedule" in text_lower or "book" in text_lower) and (
+            "meeting" in text_lower or "call" in text_lower or "appointment" in text_lower
+        ) and has_time
+        
+        # Boost events if they have clear temporal context
+        if has_strong_event or (has_time and is_scheduling_event):
+            event_similarity += 0.25  # Strong boost for clear events
 
-        if has_event_keyword or has_time:
-            event_similarity += 0.2  # Boost event score
-
-        # Task indicators (action verbs, TODO-like)
-        task_keywords = [
+        # Task indicators (action verbs for TODO-like tasks)
+        # These are tasks UNLESS they also have strong event context
+        task_action_verbs = [
             "buy",
-            "call",
             "send",
             "write",
             "submit",
@@ -212,20 +217,25 @@ class NLPService:
             "update",
             "fix",
             "create",
-            "schedule",
-            "book",
+            "verify",
+            "check",
         ]
-        has_task_keyword = any(kw in text_lower for kw in task_keywords)
+        has_task_action = any(kw in text_lower for kw in task_action_verbs)
+        
+        # "Call" without time = TASK, "Call" with specific time = EVENT
+        has_call_task = "call" in text_lower and not has_time and not is_scheduling_event
 
-        if has_task_keyword and not has_time:
-            task_similarity += 0.15  # Boost task score
+        if has_task_action or has_call_task:
+            # Boost tasks, but not if it's clearly an event
+            if not (has_strong_event or is_scheduling_event):
+                task_similarity += 0.2  # Boost task score
 
         # Note indicators (passive, reminder-like)
         note_keywords = ["remember", "note", "don't forget", "keep in mind"]
         has_note_keyword = any(kw in text_lower for kw in note_keywords)
 
         if has_note_keyword:
-            note_similarity += 0.1
+            note_similarity += 0.15  # Boost note score
 
         # Determine winner
         max_score = max(task_similarity, event_similarity, note_similarity)
@@ -282,19 +292,25 @@ class NLPService:
         """
         confidence = base_confidence
 
-        # Boost for tasks with clear deadline
+        # Boost for tasks with clear deadline or action
         if draft_type == DraftType.TASK:
             if entities.get("due_date"):
-                confidence += 0.05
+                confidence += 0.06  # Increased from 0.05
             if entities.get("priority") in ["high", "low"]:
-                confidence += 0.03
+                confidence += 0.04  # Increased from 0.03
 
         # Boost for events with time and location
         elif draft_type == DraftType.EVENT:
             if entities.get("start_time"):
-                confidence += 0.05
+                confidence += 0.06  # Increased from 0.05
             if entities.get("location"):
-                confidence += 0.03
+                confidence += 0.04  # Increased from 0.03
+        
+        # Boost for notes with clear reminder keywords
+        elif draft_type == DraftType.NOTE:
+            note_keywords = ["remember", "note", "don't forget", "keep in mind", "important"]
+            if any(kw in text.lower() for kw in note_keywords):
+                confidence += 0.05
 
         # Penalize very short or unclear text
         if len(text.split()) < 3:

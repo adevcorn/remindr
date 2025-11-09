@@ -66,7 +66,8 @@ def test_create_text_capture(client, db_session, auth_token):
     data = response.json()
     assert data["capture_type"] == "text"
     assert data["raw_text"] == "Buy groceries tomorrow at 5pm"
-    assert data["state"] in ["queued", "processing"]
+    # After inline NLP processing, state should be either parsed (high confidence) or needs_review (low confidence)
+    assert data["state"] in ["parsed", "needs_review"]
 
 
 def test_create_voice_capture(client, db_session, auth_token):
