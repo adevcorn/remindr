@@ -11,8 +11,15 @@ class OCRService:
     """Service for extracting text from images."""
 
     def __init__(self):
-        """Initialize Google Cloud Vision client."""
-        self.client = vision.ImageAnnotatorClient()
+        """Initialize Google Cloud Vision client lazily."""
+        self._client = None
+
+    @property
+    def client(self):
+        """Lazy-load the Google Cloud Vision client."""
+        if self._client is None:
+            self._client = vision.ImageAnnotatorClient()
+        return self._client
 
     async def extract_text(self, image_data: bytes) -> tuple[Optional[str], float]:
         """
