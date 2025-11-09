@@ -14,8 +14,15 @@ class SpeechToTextService:
     """Service for converting speech to text."""
 
     def __init__(self):
-        """Initialize Google Cloud Speech client."""
-        self.client = speech_v1.SpeechClient()
+        """Initialize Google Cloud Speech client lazily."""
+        self._client = None
+
+    @property
+    def client(self):
+        """Lazy-load the Google Cloud Speech client."""
+        if self._client is None:
+            self._client = speech_v1.SpeechClient()
+        return self._client
 
     async def transcribe_audio(
         self, audio_data: bytes, language_code: str = "en-US"
