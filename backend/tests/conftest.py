@@ -5,6 +5,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
+# Import all models to register them with SQLAlchemy
+from app.models.user import User
+from app.models.capture import Capture, Draft
 
 # Test database URL
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"

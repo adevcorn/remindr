@@ -121,7 +121,14 @@ class NLPService:
 
         Returns:
             Tuple of (draft_type, confidence, extracted_entities)
+        
+        Raises:
+            ValueError: If text is empty or whitespace-only
         """
+        # Validate input
+        if not text or not text.strip():
+            raise ValueError("Input text cannot be empty or whitespace-only")
+        
         # Run classification and entity extraction in parallel
         classification_task = self._classify_intent(text)
         entity_extraction_task = self._extract_entities_async(text)
