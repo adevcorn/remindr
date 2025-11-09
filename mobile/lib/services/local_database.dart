@@ -1,4 +1,4 @@
-"""Local SQLite database for offline queue with batch operations."""
+// Local SQLite database for offline queue with batch operations.
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/capture.dart';

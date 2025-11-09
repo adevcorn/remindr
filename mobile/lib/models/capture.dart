@@ -1,4 +1,4 @@
-"""Data model for Capture."""
+// Data model for Capture
 
 enum CaptureType { voice, text, image }
 

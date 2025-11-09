@@ -1,4 +1,4 @@
-"""API service for communicating with backend - thread-safe for parallel operations."""
+// API service for communicating with backend - thread-safe for parallel operations.
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/capture.dart';

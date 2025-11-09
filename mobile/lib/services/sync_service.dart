@@ -1,4 +1,4 @@
-"""Sync service for offline queue processing with parallel sync optimization."""
+// Sync service for offline queue processing with parallel sync optimization
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'local_database.dart';
@@ -342,7 +342,7 @@ class SyncService {
         syncState: 'error',
         extractedEntities: draft.extractedEntities,
         createdAt: draft.createdAt,
-        updatedAt: DateTime.now().toIso8601String(),
+        updatedAt: DateTime.now(),
       );
       
       return {

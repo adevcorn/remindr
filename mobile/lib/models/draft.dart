@@ -1,4 +1,4 @@
-"""Data model for Draft."""
+// Data model for Draft
 
 enum DraftType { task, event, note }
 

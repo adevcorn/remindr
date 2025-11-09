@@ -1,4 +1,4 @@
-"""Main Flutter application."""
+// Main Flutter application
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/local_database.dart';

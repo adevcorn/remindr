@@ -1,4 +1,4 @@
-"""Login screen with Google Sign-In."""
+// Login screen with Google Sign-In
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'home_screen.dart';

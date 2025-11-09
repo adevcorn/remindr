@@ -1,4 +1,4 @@
-"""Home screen with capture inputs."""
+// Home screen with capture inputs
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';

@@ -1,47 +1,41 @@
-"""
-Authentication service for Google OAuth and session management.
-
-This service implements a mobile-friendly OAuth flow:
-1. Uses Google Sign-In SDK for client-side authentication
-2. Extracts ID token from Google Sign-In result
-3. Sends ID token to backend for verification
-4. Backend verifies token and returns a session token
-5. Session token is stored securely and used for all API calls
-
-Session Management:
-- Sessions expire after 30 days (configured on backend)
-- When expired, user must sign in again (acceptable for MVP)
-- 401 responses trigger automatic session cleanup
-- Tokens are stored securely using FlutterSecureStorage
-
-Security:
-- ID tokens are verified by backend with Google's servers
-- Session tokens are stored in secure storage (not plain text)
-- All API calls use Bearer token authentication
-"""
+// Authentication service for Google OAuth and session management.
 import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 class AuthService {
-  final String baseUrl;
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: [
-      'email',
-      'profile',
-      'https://www.googleapis.com/auth/tasks',
-      'https://www.googleapis.com/auth/calendar',
-    ],
-  );
+  /// Set the session token (used for testing)
+  void setAuthToken(String token) {
+    _sessionToken = token;
+  }
+   final String baseUrl;
+   final FlutterSecureStorage _secureStorage;
+   final GoogleSignIn _googleSignIn;
+   final http.Client _client;
+
+
+   AuthService({
+     this.baseUrl = 'http://localhost:8000/api/v1',
+     FlutterSecureStorage? secureStorage,
+     GoogleSignIn? googleSignIn,
+     http.Client? client,
+   })  : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+         _googleSignIn = googleSignIn ?? GoogleSignIn(
+           scopes: [
+             'email',
+             'profile',
+             'https://www.googleapis.com/auth/tasks',
+             'https://www.googleapis.com/auth/calendar',
+           ],
+         ),
+         _client = client ?? http.Client();
 
   String? _sessionToken;
   String? _userId;
   String? _email;
   String? _name;
 
-  AuthService({this.baseUrl = 'http://localhost:8000/api/v1'});
 
   // Getters
   String? get sessionToken => _sessionToken;
@@ -101,15 +95,15 @@ class AuthService {
       }
 
       // Send ID token to backend for verification
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/google-token'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'id_token': idToken,
-        }),
-      );
+       final response = await _client.post(
+         Uri.parse('$baseUrl/auth/google-token'),
+         headers: {
+           'Content-Type': 'application/json',
+         },
+         body: jsonEncode({
+           'id_token': idToken,
+         }),
+       );
 
       if (response.statusCode == 200) {
         final authData = jsonDecode(response.body);
@@ -142,13 +136,13 @@ class AuthService {
     try {
       // Call backend logout endpoint
       if (_sessionToken != null) {
-        await http.post(
-          Uri.parse('$baseUrl/auth/logout'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $_sessionToken',
-          },
-        );
+         await _client.post(
+           Uri.parse('$baseUrl/auth/logout'),
+           headers: {
+             'Content-Type': 'application/json',
+             'Authorization': 'Bearer $_sessionToken',
+           },
+         );
       }
 
       // Sign out from Google
@@ -180,13 +174,13 @@ class AuthService {
     if (_sessionToken == null) return false;
 
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/auth/me'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_sessionToken',
-        },
-      );
+       final response = await _client.get(
+         Uri.parse('$baseUrl/auth/me'),
+         headers: {
+           'Content-Type': 'application/json',
+           'Authorization': 'Bearer $_sessionToken',
+         },
+       );
 
       if (response.statusCode == 200) {
         return true;
