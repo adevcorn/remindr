@@ -37,14 +37,32 @@ def mock_google_services():
     """Mock Google Cloud services to prevent real API calls during tests."""
     # Mock Google Cloud Vision client
     with patch("google.cloud.vision.ImageAnnotatorClient") as mock_vision:
-        mock_client = MagicMock()
-        mock_vision.return_value = mock_client
+        mock_vision_client = MagicMock()
+        mock_vision.return_value = mock_vision_client
         
         # Mock OCR response
         mock_response = MagicMock()
         mock_response.error.message = ""
         mock_response.full_text_annotation.text = "Sample OCR text"
         mock_response.full_text_annotation.pages = []
-        mock_client.document_text_detection.return_value = mock_response
+        mock_vision_client.document_text_detection.return_value = mock_response
         
-        yield mock_client
+        # Mock Google Cloud Speech client
+        with patch("google.cloud.speech_v1.SpeechClient") as mock_speech:
+            mock_speech_client = MagicMock()
+            mock_speech.return_value = mock_speech_client
+            
+            # Mock speech recognition response
+            mock_speech_response = MagicMock()
+            mock_speech_result = MagicMock()
+            mock_speech_alternative = MagicMock()
+            mock_speech_alternative.transcript = "Sample transcription"
+            mock_speech_alternative.confidence = 0.95
+            mock_speech_result.alternatives = [mock_speech_alternative]
+            mock_speech_response.results = [mock_speech_result]
+            mock_speech_client.recognize.return_value = mock_speech_response
+            
+            yield {
+                "vision": mock_vision_client,
+                "speech": mock_speech_client
+            }
