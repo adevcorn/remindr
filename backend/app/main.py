@@ -13,7 +13,8 @@ from app.db.session import engine
 
 # Import models to register them with Base before creating tables
 from app.models.capture import Capture, Draft  # noqa: F401
-from app.models.user import Session as UserSession, User  # noqa: F401
+from app.models.user import Session as UserSession  # noqa: F401
+from app.models.user import User  # noqa: F401
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
