@@ -1,4 +1,4 @@
-"""Local SQLite database for offline queue."""
+"""Local SQLite database for offline queue with batch operations."""
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/capture.dart';
@@ -95,6 +95,7 @@ class LocalDatabase {
     return result.map((json) => Capture.fromSqlite(json)).toList();
   }
 
+  /// Batch operation: Get all pending captures at once
   Future<List<Capture>> getPendingCaptures() async {
     final db = await instance.database;
     final result = await db.query(
@@ -114,6 +115,42 @@ class LocalDatabase {
       where: 'id = ?',
       whereArgs: [capture.id],
     );
+  }
+
+  /// Batch operation: Update multiple captures in a single transaction
+  /// This dramatically reduces database I/O overhead
+  Future<void> batchUpdateCaptures(List<Capture> captures) async {
+    if (captures.isEmpty) return;
+
+    final db = await instance.database;
+    final batch = db.batch();
+
+    for (final capture in captures) {
+      batch.update(
+        'captures',
+        capture.toSqlite(),
+        where: 'id = ?',
+        whereArgs: [capture.id],
+      );
+    }
+
+    await batch.commit(noResult: true);
+    print('Batch updated ${captures.length} captures');
+  }
+
+  /// Batch operation: Insert multiple captures in a single transaction
+  Future<void> batchInsertCaptures(List<Capture> captures) async {
+    if (captures.isEmpty) return;
+
+    final db = await instance.database;
+    final batch = db.batch();
+
+    for (final capture in captures) {
+      batch.insert('captures', capture.toSqlite());
+    }
+
+    await batch.commit(noResult: true);
+    print('Batch inserted ${captures.length} captures');
   }
 
   // Draft operations
@@ -149,6 +186,7 @@ class LocalDatabase {
     }).toList();
   }
 
+  /// Batch operation: Get all pending drafts at once
   Future<List<Draft>> getPendingDrafts() async {
     final db = await instance.database;
     final result = await db.query(
@@ -175,6 +213,76 @@ class LocalDatabase {
       where: 'id = ?',
       whereArgs: [draft.id],
     );
+  }
+
+  /// Batch operation: Update multiple drafts in a single transaction
+  /// This dramatically reduces database I/O overhead
+  Future<void> batchUpdateDrafts(List<Draft> drafts) async {
+    if (drafts.isEmpty) return;
+
+    final db = await instance.database;
+    final batch = db.batch();
+
+    for (final draft in drafts) {
+      final data = draft.toJson();
+      data['is_confirmed'] = draft.isConfirmed ? 1 : 0;
+      
+      batch.update(
+        'drafts',
+        data,
+        where: 'id = ?',
+        whereArgs: [draft.id],
+      );
+    }
+
+    await batch.commit(noResult: true);
+    print('Batch updated ${drafts.length} drafts');
+  }
+
+  /// Batch operation: Insert multiple drafts in a single transaction
+  Future<void> batchInsertDrafts(List<Draft> drafts) async {
+    if (drafts.isEmpty) return;
+
+    final db = await instance.database;
+    final batch = db.batch();
+
+    for (final draft in drafts) {
+      final data = draft.toJson();
+      data['is_confirmed'] = draft.isConfirmed ? 1 : 0;
+      batch.insert('drafts', data);
+    }
+
+    await batch.commit(noResult: true);
+    print('Batch inserted ${drafts.length} drafts');
+  }
+
+  /// Batch operation: Get counts of items by state for progress tracking
+  Future<Map<String, int>> getSyncStatistics() async {
+    final db = await instance.database;
+    
+    final captureStats = await db.rawQuery('''
+      SELECT state, COUNT(*) as count 
+      FROM captures 
+      GROUP BY state
+    ''');
+    
+    final draftStats = await db.rawQuery('''
+      SELECT sync_state, COUNT(*) as count 
+      FROM drafts 
+      GROUP BY sync_state
+    ''');
+    
+    final stats = <String, int>{};
+    
+    for (final row in captureStats) {
+      stats['captures_${row['state']}'] = row['count'] as int;
+    }
+    
+    for (final row in draftStats) {
+      stats['drafts_${row['sync_state']}'] = row['count'] as int;
+    }
+    
+    return stats;
   }
 
   Future close() async {

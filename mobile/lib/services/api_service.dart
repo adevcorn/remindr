@@ -1,4 +1,4 @@
-"""API service for communicating with backend."""
+"""API service for communicating with backend - thread-safe for parallel operations."""
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/capture.dart';
@@ -8,6 +8,9 @@ class ApiService {
   final String baseUrl;
   String? _authToken;
   Function()? onUnauthorized;
+  
+  // HTTP client reuse for connection pooling and better performance
+  final http.Client _client = http.Client();
 
   ApiService({this.baseUrl = 'http://localhost:8000/api/v1'});
 
@@ -29,9 +32,9 @@ class ApiService {
     onUnauthorized?.call();
   }
 
-  // Generic GET request
+  // Generic GET request - thread-safe
   Future<Map<String, dynamic>> get(String path) async {
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse('$baseUrl$path'),
       headers: _headers,
     );
@@ -46,9 +49,9 @@ class ApiService {
     }
   }
 
-  // Capture endpoints
+  // Capture endpoints - thread-safe for parallel calls
   Future<Capture> createCapture(Capture capture) async {
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse('$baseUrl/captures/captures'),
       headers: _headers,
       body: jsonEncode(capture.toJson()),
@@ -65,7 +68,7 @@ class ApiService {
   }
 
   Future<List<Capture>> getCaptures({int skip = 0, int limit = 100}) async {
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse('$baseUrl/captures/captures?skip=$skip&limit=$limit'),
       headers: _headers,
     );
@@ -82,7 +85,7 @@ class ApiService {
   }
 
   Future<Capture> getCapture(int captureId) async {
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse('$baseUrl/captures/captures/$captureId'),
       headers: _headers,
     );
@@ -97,7 +100,7 @@ class ApiService {
     }
   }
 
-  // Draft endpoints
+  // Draft endpoints - thread-safe for parallel calls
   Future<List<Draft>> getDrafts({
     int skip = 0,
     int limit = 100,
@@ -108,7 +111,7 @@ class ApiService {
       url += '&needs_review_only=$needsReviewOnly';
     }
 
-    final response = await http.get(
+    final response = await _client.get(
       Uri.parse(url),
       headers: _headers,
     );
@@ -139,7 +142,7 @@ class ApiService {
       if (priority != null) 'priority': priority,
     };
 
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse('$baseUrl/captures/drafts/$draftId/confirm'),
       headers: _headers,
       body: jsonEncode(body),
@@ -155,16 +158,21 @@ class ApiService {
     }
   }
 
-  // Health check
+  // Health check - thread-safe
   Future<bool> checkHealth() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('${baseUrl.replaceAll('/api/v1', '')}/health'),
         headers: _headers,
-      );
+      ).timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (e) {
       return false;
     }
+  }
+
+  /// Dispose HTTP client when service is no longer needed
+  void dispose() {
+    _client.close();
   }
 }
