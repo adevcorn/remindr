@@ -105,6 +105,41 @@ def get_current_user(
     return user
 
 
+def get_current_user_credentials(
+    user: User = Depends(get_current_user)
+) -> dict:
+    """
+    Get the current user's Google OAuth credentials as a dict.
+    
+    Returns:
+        Dict with OAuth credentials compatible with google-auth library
+        
+    Raises:
+        HTTPException: 401 if credentials not available
+    """
+    if not user.google_access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google credentials not found. Please connect Google account."
+        )
+    
+    # Convert to format expected by google.oauth2.credentials.Credentials
+    credentials = {
+        "token": user.google_access_token,
+        "refresh_token": user.google_refresh_token,
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "client_secret": settings.GOOGLE_CLIENT_SECRET,
+        "scopes": user.google_scopes.split() if user.google_scopes else []
+    }
+    
+    # Add expiry if available
+    if user.google_token_expiry:
+        credentials["expiry"] = user.google_token_expiry.isoformat()
+    
+    return credentials
+
+
 def revoke_session(db: Session, session_token: str) -> bool:
     """Revoke a session token."""
     session = db.query(UserSession).filter(

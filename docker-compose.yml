@@ -21,23 +21,7 @@ services:
     networks:
       - remindr-network
 
-  # Redis for Celery
-  redis:
-    image: redis:7-alpine
-    container_name: remindr-redis
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - remindr-network
-
-  # Backend API
+  # Backend API (with native async background tasks, no Celery)
   backend:
     build:
       context: ./backend
@@ -45,7 +29,6 @@ services:
     container_name: remindr-backend
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-remindr}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-remindr}
-      REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY}
       GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
@@ -63,8 +46,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -75,55 +56,8 @@ services:
       - remindr-network
     restart: unless-stopped
 
-  # Celery Worker for async tasks
-  celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: remindr-celery-worker
-    command: celery -A app.services.tasks worker --loglevel=info --concurrency=4
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-remindr}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-remindr}
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY}
-      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
-      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
-      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.85}
-    volumes:
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-./credentials/service-account.json}:/app/credentials/service-account.json:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - remindr-network
-    restart: unless-stopped
-
-  # Celery Beat for scheduled tasks
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: remindr-celery-beat
-    command: celery -A app.services.tasks beat --loglevel=info
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-remindr}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-remindr}
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - remindr-network
-    restart: unless-stopped
-
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
     driver: local
 
 networks:

@@ -18,9 +18,6 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/callback"
 
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
-
     # App Configuration
     SECRET_KEY: str = "change-this-in-production"
     AI_CONFIDENCE_THRESHOLD: float = 0.85

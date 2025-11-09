@@ -1,9 +1,10 @@
 """Capture API endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 import base64
 from datetime import datetime
+import logging
 
 from app.api.schemas.capture import (
     CaptureCreate,
@@ -18,7 +19,10 @@ from app.services.speech_to_text import speech_service
 from app.services.ocr import ocr_service
 from app.services.nlp import nlp_service
 from app.core.config import settings
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, get_current_user_credentials
+from app.services.tasks import sync_draft_to_google_with_retry
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -26,11 +30,14 @@ router = APIRouter()
 @router.post("/captures", response_model=CaptureResponse, status_code=status.HTTP_201_CREATED)
 async def create_capture(
     capture: CaptureCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user_id)
 ):
     """
     Create a new capture (voice, text, or image).
+    Processes capture immediately and returns response < 3s.
+    Background sync happens asynchronously without blocking.
     """
     # Create capture record
     db_capture = Capture(
@@ -72,6 +79,7 @@ async def create_capture(
         db.refresh(db_capture)
         
         # Run NLP classification if we have text
+        # This is fast (< 500ms) so we do it inline
         if db_capture.raw_text:
             await process_capture_nlp(db_capture.id, db)
         
@@ -79,6 +87,7 @@ async def create_capture(
         db_capture.state = CaptureState.ERROR
         db_capture.error_message = str(e)
         db.commit()
+        logger.exception(f"Failed to process capture {db_capture.id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process capture: {str(e)}"
@@ -131,6 +140,7 @@ async def process_capture_nlp(capture_id: int, db: Session):
         capture.state = CaptureState.ERROR
         capture.error_message = f"NLP processing failed: {str(e)}"
         db.commit()
+        logger.exception(f"NLP processing failed for capture {capture_id}: {e}")
 
 
 @router.get("/captures", response_model=List[CaptureResponse])
@@ -190,10 +200,15 @@ async def list_drafts(
 async def confirm_draft(
     draft_id: int,
     confirm: DraftConfirm,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(get_current_user_id),
+    user_credentials: dict = Depends(get_current_user_credentials)
 ):
-    """Confirm and optionally edit a draft."""
+    """
+    Confirm and optionally edit a draft.
+    Immediately queues Google sync in background without blocking response.
+    """
     draft = db.query(Draft).filter(
         Draft.id == draft_id,
         Draft.user_id == user_id
@@ -221,4 +236,54 @@ async def confirm_draft(
     db.commit()
     db.refresh(draft)
     
+    # Queue Google sync in background (non-blocking)
+    # Uses FastAPI BackgroundTasks instead of Celery - removes 1-3s overhead
+    background_tasks.add_task(
+        sync_draft_to_google_with_retry,
+        draft_id=draft.id,
+        user_credentials=user_credentials,
+        retry_count=0
+    )
+    
+    logger.info(f"Draft {draft_id} confirmed, Google sync queued in background")
+    
     return draft
+
+
+@router.post("/sync/offline-queue")
+async def sync_offline_queue(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+    user_credentials: dict = Depends(get_current_user_credentials)
+):
+    """
+    Sync all pending drafts for user (offline queue processing).
+    Returns immediately, syncs happen in background.
+    """
+    # Get all confirmed but unsynced drafts
+    drafts = db.query(Draft).filter(
+        Draft.user_id == user_id,
+        Draft.is_confirmed == True,
+        Draft.sync_state.in_([CaptureState.CONFIRMED, CaptureState.ERROR])
+    ).all()
+    
+    draft_ids = [draft.id for draft in drafts]
+    
+    # Queue each draft for background sync
+    for draft_id in draft_ids:
+        background_tasks.add_task(
+            sync_draft_to_google_with_retry,
+            draft_id=draft_id,
+            user_credentials=user_credentials,
+            retry_count=0
+        )
+    
+    logger.info(f"Queued {len(draft_ids)} drafts for background sync for user {user_id}")
+    
+    return {
+        "user_id": user_id,
+        "queued_count": len(draft_ids),
+        "draft_ids": draft_ids,
+        "status": "queued"
+    }

@@ -12,8 +12,6 @@ google-auth-oauthlib==1.1.0
 google-auth-httplib2==0.1.1
 google-api-python-client==2.108.0
 sentence-transformers==2.2.2
-celery==5.3.4
-redis==5.0.1
 python-multipart==0.0.6
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
