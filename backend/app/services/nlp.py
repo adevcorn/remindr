@@ -182,7 +182,13 @@ class NLPService:
 
         # Task action verbs - things you need to DO
         # Note keywords - highest priority to avoid conflicts with action verbs
-        note_keywords = ["remember", "note to", "don't forget", "keep in mind", "important:"]
+        note_keywords = [
+            "remember",
+            "note to",
+            "don't forget",
+            "keep in mind",
+            "important:",
+        ]
         has_note_keyword = any(kw in text_lower for kw in note_keywords)
 
         # Event indicators - things you will ATTEND (not actions to do)
