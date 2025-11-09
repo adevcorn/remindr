@@ -60,13 +60,16 @@ def test_user_with_session():
     # Create session
     session_token = create_user_session(db, user.user_id)
     
-    db.close()
-    
-    return {
+    # Extract attributes before closing session
+    user_data = {
         "user_id": user.user_id,
         "email": user.email,
         "session_token": session_token
     }
+    
+    db.close()
+    
+    return user_data
 
 
 def test_connect_google_requires_authentication():
