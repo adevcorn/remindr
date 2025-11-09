@@ -1,5 +1,6 @@
 """Tests for capture endpoints."""
 import pytest
+import uuid
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -44,9 +45,13 @@ def test_db():
 @pytest.fixture
 def test_user(test_db):
     """Create a test user."""
+    # Generate unique IDs for this test
+    unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
+    unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+    
     user = User(
-        user_id="test_user_123",
-        email="test@example.com",
+        user_id=unique_user_id,
+        email=unique_email,
         name="Test User",
         google_access_token="test_token",
         google_refresh_token="test_refresh",

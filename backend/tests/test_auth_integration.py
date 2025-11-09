@@ -1,5 +1,6 @@
 """Integration tests for authentication flows."""
 import pytest
+import uuid
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from datetime import datetime, timedelta
@@ -28,11 +29,15 @@ class TestGoogleTokenAuthentication:
     
     def test_authenticate_with_valid_token(self, client, mock_google_id_token, db_session: Session):
         """Test successful authentication with valid Google ID token."""
+        # Generate unique IDs for this test
+        unique_user_id = f"google_user_{uuid.uuid4().hex[:8]}"
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        
         # Mock successful token verification
         mock_google_id_token.return_value = {
             'iss': 'accounts.google.com',
-            'sub': 'google_user_123',
-            'email': 'test@example.com',
+            'sub': unique_user_id,
+            'email': unique_email,
             'name': 'Test User'
         }
         
@@ -44,21 +49,25 @@ class TestGoogleTokenAuthentication:
         assert response.status_code == 200
         data = response.json()
         assert 'session_token' in data
-        assert data['email'] == 'test@example.com'
+        assert data['email'] == unique_email
         assert data['name'] == 'Test User'
-        assert data['user_id'] == 'google_user_123'
+        assert data['user_id'] == unique_user_id
         
         # Verify user was created in database
-        user = db_session.query(User).filter(User.email == 'test@example.com').first()
+        user = db_session.query(User).filter(User.email == unique_email).first()
         assert user is not None
-        assert user.user_id == 'google_user_123'
+        assert user.user_id == unique_user_id
     
     def test_authenticate_existing_user(self, client, mock_google_id_token, db_session: Session):
         """Test authentication with existing user updates last_login."""
+        # Generate unique IDs for this test
+        unique_user_id = f"google_user_{uuid.uuid4().hex[:8]}"
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        
         # Create existing user
         existing_user = User(
-            user_id='google_user_123',
-            email='test@example.com',
+            user_id=unique_user_id,
+            email=unique_email,
             name='Old Name',
             last_login_at=datetime.utcnow() - timedelta(days=7)
         )
@@ -69,8 +78,8 @@ class TestGoogleTokenAuthentication:
         # Mock token verification
         mock_google_id_token.return_value = {
             'iss': 'accounts.google.com',
-            'sub': 'google_user_123',
-            'email': 'test@example.com',
+            'sub': unique_user_id,
+            'email': unique_email,
             'name': 'New Name'
         }
         
@@ -114,9 +123,11 @@ class TestGoogleTokenAuthentication:
     
     def test_authenticate_without_email(self, client, mock_google_id_token):
         """Test authentication fails without email in token."""
+        unique_user_id = f"google_user_{uuid.uuid4().hex[:8]}"
+        
         mock_google_id_token.return_value = {
             'iss': 'accounts.google.com',
-            'sub': 'google_user_123',
+            'sub': unique_user_id,
             # Missing email
         }
         
@@ -134,10 +145,14 @@ class TestSessionManagement:
     
     def test_session_token_stored(self, client, db_session: Session):
         """Test that session token is stored in database."""
+        # Generate unique IDs for this test
+        unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        
         # Create user
         user = User(
-            user_id='test_user_123',
-            email='test@example.com',
+            user_id=unique_user_id,
+            email=unique_email,
             name='Test User'
         )
         db_session.add(user)
@@ -156,10 +171,14 @@ class TestSessionManagement:
     
     def test_me_endpoint_with_valid_token(self, client, db_session: Session):
         """Test /me endpoint returns user info with valid token."""
+        # Generate unique IDs for this test
+        unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        
         # Create user and session
         user = User(
-            user_id='test_user_123',
-            email='test@example.com',
+            user_id=unique_user_id,
+            email=unique_email,
             name='Test User'
         )
         db_session.add(user)
@@ -174,15 +193,19 @@ class TestSessionManagement:
         
         assert response.status_code == 200
         data = response.json()
-        assert data['email'] == 'test@example.com'
-        assert data['user_id'] == 'test_user_123'
+        assert data['email'] == unique_email
+        assert data['user_id'] == unique_user_id
     
     def test_me_endpoint_with_expired_token(self, client, db_session: Session):
         """Test /me endpoint returns 401 with expired token."""
+        # Generate unique IDs for this test
+        unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        
         # Create user
         user = User(
-            user_id='test_user_123',
-            email='test@example.com'
+            user_id=unique_user_id,
+            email=unique_email
         )
         db_session.add(user)
         db_session.commit()
@@ -207,10 +230,14 @@ class TestSessionManagement:
     
     def test_logout_revokes_session(self, client, db_session: Session):
         """Test logout endpoint revokes session."""
+        # Generate unique IDs for this test
+        unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        
         # Create user and session
         user = User(
-            user_id='test_user_123',
-            email='test@example.com'
+            user_id=unique_user_id,
+            email=unique_email
         )
         db_session.add(user)
         db_session.commit()
@@ -242,9 +269,13 @@ class TestTokenExpiry:
     
     def test_session_expires_after_30_days(self, db_session: Session):
         """Test session token expires after configured period."""
+        # Generate unique IDs for this test
+        unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        
         user = User(
-            user_id='test_user_123',
-            email='test@example.com'
+            user_id=unique_user_id,
+            email=unique_email
         )
         db_session.add(user)
         db_session.commit()
@@ -262,10 +293,14 @@ class TestTokenExpiry:
     
     def test_last_accessed_updates(self, client, db_session: Session):
         """Test last_accessed_at updates on each request."""
+        # Generate unique IDs for this test
+        unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
+        unique_email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+        
         # Create user and session
         user = User(
-            user_id='test_user_123',
-            email='test@example.com'
+            user_id=unique_user_id,
+            email=unique_email
         )
         db_session.add(user)
         db_session.commit()
