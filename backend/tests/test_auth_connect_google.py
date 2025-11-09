@@ -142,6 +142,14 @@ def test_callback_connect_flow(mock_build, mock_flow_class, client, db_session, 
     mock_credentials.refresh_token = "new_refresh_token"
     mock_credentials.expiry = datetime.utcnow() + timedelta(hours=1)
     mock_flow.credentials = mock_credentials
+    
+    # Mock authorization_url method to return (url, state) tuple
+    test_state = "test_oauth_state_12345"
+    mock_flow.authorization_url.return_value = (
+        "https://accounts.google.com/o/oauth2/auth?client_id=test",
+        test_state
+    )
+    
     mock_flow_class.from_client_config.return_value = mock_flow
     
     # Mock Google userinfo API
