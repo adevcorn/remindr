@@ -243,22 +243,26 @@ class NLPService:
         # Priority 1: Note keywords ALWAYS indicate NOTE (to avoid "note: check..." being a task)
         if has_note_keyword:
             draft_type = DraftType.NOTE
-            confidence = min(note_similarity + 0.15, 1.0)
+            # Guarantee minimum confidence for rule-based match
+            confidence = max(0.70, min(note_similarity + 0.15, 1.0))
 
         # Priority 2: Organizing verbs ALWAYS indicate TASK (even with event keywords)
         elif has_organizing_verb:
             draft_type = DraftType.TASK
-            confidence = min(task_similarity + 0.20, 1.0)
+            # Guarantee minimum confidence for rule-based match
+            confidence = max(0.70, min(task_similarity + 0.20, 1.0))
 
         # Priority 3: Event keywords + time = EVENT (if no organizing verb)
         elif has_strong_event and has_time:
             draft_type = DraftType.EVENT
-            confidence = min(event_similarity + 0.20, 1.0)
+            # Guarantee minimum confidence for rule-based match
+            confidence = max(0.70, min(event_similarity + 0.20, 1.0))
 
         # Priority 4: Other task action verbs indicate TASK
         elif has_task_action:
             draft_type = DraftType.TASK
-            confidence = min(task_similarity + 0.20, 1.0)
+            # Guarantee minimum confidence for rule-based match
+            confidence = max(0.70, min(task_similarity + 0.20, 1.0))
 
         # Fallback: Use highest similarity score
         else:
