@@ -63,8 +63,9 @@ async def root():
 
 
 @app.get("/health")
+@limiter.exempt
 async def health_check():
-    """Health check endpoint."""
+    """Health check endpoint (exempt from rate limiting)."""
     return {"status": "healthy"}
 
 

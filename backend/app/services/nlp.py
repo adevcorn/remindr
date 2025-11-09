@@ -177,40 +177,11 @@ class NLPService:
         # Rule-based boosting for clear indicators
         text_lower = text.lower()
 
-        # Event indicators (meetings, appointments with specific time/date)
-        # Strong event indicators: meetings, appointments, scheduled activities WITH time
-        strong_event_keywords = [
-            "meeting",
-            "appointment",
-            "conference",
-            "lunch with",
-            "dinner with",
-            "party",
-        ]
-
         # Check for time patterns
         has_time = self._has_time_pattern(text)
-        has_strong_event = any(kw in text_lower for kw in strong_event_keywords)
 
-        # "Schedule" + meeting/call + time = EVENT, not TASK
-        # "Call dentist at 2pm" = EVENT (has time)
-        # "Call dentist" = TASK (no time)
-        is_scheduling_event = (
-            ("schedule" in text_lower or "book" in text_lower)
-            and (
-                "meeting" in text_lower
-                or "call" in text_lower
-                or "appointment" in text_lower
-            )
-            and has_time
-        )
-
-        # Boost events if they have clear temporal context
-        if has_strong_event or (has_time and is_scheduling_event):
-            event_similarity += 0.25  # Strong boost for clear events
-
-        # Task indicators (action verbs for TODO-like tasks)
-        # These are tasks UNLESS they also have strong event context
+        # Task action verbs - things you need to DO
+        # If text starts with these, it's almost always a TASK, even with time
         task_action_verbs = [
             "buy",
             "send",
@@ -225,18 +196,38 @@ class NLPService:
             "create",
             "verify",
             "check",
+            "call",  # "Call dentist at 2pm" = TASK (you need to make the call)
+            "schedule",  # "Schedule meeting" = TASK (you need to schedule it)
+            "book",  # "Book appointment" = TASK (you need to book it)
+            "email",
+            "text",
+            "message",
+            "remind",
         ]
-        has_task_action = any(kw in text_lower for kw in task_action_verbs)
-
-        # "Call" without time = TASK, "Call" with specific time = EVENT
-        has_call_task = (
-            "call" in text_lower and not has_time and not is_scheduling_event
+        has_task_action = any(
+            text_lower.startswith(kw) or f" {kw} " in text_lower
+            for kw in task_action_verbs
         )
 
-        if has_task_action or has_call_task:
-            # Boost tasks, but not if it's clearly an event
-            if not (has_strong_event or is_scheduling_event):
-                task_similarity += 0.2  # Boost task score
+        # Event indicators - things you will ATTEND
+        # These are events if NO action verb precedes them
+        strong_event_keywords = [
+            "meeting",
+            "appointment",
+            "conference",
+            "lunch with",
+            "dinner with",
+            "party",
+        ]
+        has_strong_event = any(kw in text_lower for kw in strong_event_keywords)
+
+        # If it's a TASK action, boost task score strongly
+        if has_task_action:
+            task_similarity += 0.25  # Strong boost for action verbs
+
+        # If it has event keywords but NO action verb, and has time, it's likely an event
+        elif has_strong_event and has_time:
+            event_similarity += 0.25  # Strong boost for clear events
 
         # Note indicators (passive, reminder-like)
         note_keywords = ["remember", "note", "don't forget", "keep in mind"]
