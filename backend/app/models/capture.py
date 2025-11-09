@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
+from sqlalchemy.types import JSON
 
 from app.db.base import Base
 
@@ -98,7 +99,9 @@ class Draft(Base):
     sync_state = Column(Enum(CaptureState), default=CaptureState.PARSED)
 
     # Metadata
-    extracted_entities = Column(JSONB, nullable=True)  # Full NLP output
+    extracted_entities = Column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )  # Full NLP output
 
     # Timestamps
     created_at = Column(
