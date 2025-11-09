@@ -1,14 +1,14 @@
 """Main FastAPI application."""
+
+from app.api.endpoints import auth, captures
+from app.core.config import settings
+from app.db.base import Base
+from app.db.session import engine
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-
-from app.core.config import settings
-from app.api.endpoints import captures, auth
-from app.db.base import Base
-from app.db.session import engine
+from slowapi.util import get_remote_address
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -20,7 +20,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Intelligent productivity tool for capturing tasks and events"
+    description="Intelligent productivity tool for capturing tasks and events",
 )
 
 # Add rate limiting
@@ -37,16 +37,10 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(
-    auth.router,
-    prefix=f"{settings.API_V1_PREFIX}/auth",
-    tags=["auth"]
-)
+app.include_router(auth.router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["auth"])
 
 app.include_router(
-    captures.router,
-    prefix=f"{settings.API_V1_PREFIX}/captures",
-    tags=["captures"]
+    captures.router, prefix=f"{settings.API_V1_PREFIX}/captures", tags=["captures"]
 )
 
 
@@ -56,7 +50,7 @@ async def root():
     return {
         "name": settings.PROJECT_NAME,
         "version": settings.VERSION,
-        "status": "running"
+        "status": "running",
     }
 
 
@@ -68,4 +62,5 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

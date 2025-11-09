@@ -1,10 +1,12 @@
 """Speech-to-text service using Google Cloud Speech API."""
-import base64
+
 import asyncio
+import base64
+from typing import Optional
+
+from app.core.config import settings
 from google.cloud import speech_v1
 from google.cloud.speech_v1 import types
-from typing import Optional
-from app.core.config import settings
 
 
 class SpeechToTextService:
@@ -15,9 +17,7 @@ class SpeechToTextService:
         self.client = speech_v1.SpeechClient()
 
     async def transcribe_audio(
-        self,
-        audio_data: bytes,
-        language_code: str = "en-US"
+        self, audio_data: bytes, language_code: str = "en-US"
     ) -> tuple[Optional[str], float]:
         """
         Transcribe audio data to text.
@@ -29,6 +29,7 @@ class SpeechToTextService:
         Returns:
             Tuple of (transcribed_text, confidence_score)
         """
+
         def _transcribe_blocking():
             """Blocking I/O operation for speech recognition."""
             audio = types.RecognitionAudio(content=audio_data)
@@ -37,26 +38,26 @@ class SpeechToTextService:
                 sample_rate_hertz=16000,
                 language_code=language_code,
                 enable_automatic_punctuation=True,
-                model="latest_long"
+                model="latest_long",
             )
 
             try:
                 response = self.client.recognize(config=config, audio=audio)
-                
+
                 if not response.results:
                     return None, 0.0
-                
+
                 # Get the first result with highest confidence
                 result = response.results[0]
                 if not result.alternatives:
                     return None, 0.0
-                
+
                 alternative = result.alternatives[0]
                 return alternative.transcript, alternative.confidence
 
             except Exception as e:
                 raise Exception(f"Speech-to-text failed: {str(e)}")
-        
+
         # Run blocking call in thread pool
         return await asyncio.to_thread(_transcribe_blocking)
 

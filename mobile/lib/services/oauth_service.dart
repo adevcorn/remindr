@@ -1,7 +1,6 @@
 // OAuth service for Google services connection
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:uni_links/uni_links.dart';
 import 'dart:async';
 import 'api_service.dart';
 
@@ -18,7 +17,6 @@ class OAuthService {
       final response = await _apiService.get('/auth/connect-google');
       
       final authUrl = response['authorization_url'] as String;
-      final state = response['state'] as String;
 
       // Launch OAuth URL in browser
       final uri = Uri.parse(authUrl);
