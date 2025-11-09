@@ -9,12 +9,21 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.models.user import User, Session as UserSession
 from app.core.auth import create_user_session
+from app.db.session import get_db
 
 
 @pytest.fixture
-def client():
-    """Test client for API calls."""
-    return TestClient(app)
+def client(db_session):
+    """Test client for API calls with overridden database."""
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass  # Session cleanup handled by db_session fixture
+    
+    app.dependency_overrides[get_db] = override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

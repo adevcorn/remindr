@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.base import Base
 # Import all models to register them with SQLAlchemy
-from app.models.user import User
+from app.models.user import User, Session as UserSession
 from app.models.capture import Capture, Draft
 
 # Test database URL
