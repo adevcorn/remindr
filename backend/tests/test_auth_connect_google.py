@@ -2,84 +2,63 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta
 
 from app.main import app
-from app.db.base import Base
 from app.db.session import get_db
 from app.models.user import User
 from app.core.auth import create_user_session
 
-# Test database setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_connect_google.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base.metadata.create_all(bind=engine)
-
-
-def override_get_db():
-    """Override database dependency for testing."""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def setup_database():
-    """Setup and teardown test database."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
+@pytest.fixture
+def client(db_session):
+    """Test client with database override."""
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass  # db_session cleanup is handled by conftest fixture
+    
+    app.dependency_overrides[get_db] = override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def test_user_with_session():
+def test_user_with_session(db_session):
     """Create test user with valid session."""
-    db = TestingSessionLocal()
-    
     # Create user without OAuth tokens
     user = User(
-        user_id="test_user_123",
-        email="test@example.com",
-        name="Test User",
+        user_id="test_user_connect_123",
+        email="test_connect@example.com",
+        name="Test User Connect",
         last_login_at=datetime.utcnow()
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
     
     # Create session
-    session_token = create_user_session(db, user.user_id)
+    session_token = create_user_session(db_session, user.user_id)
     
-    # Extract attributes before closing session
+    # Extract attributes before session rollback
     user_data = {
         "user_id": user.user_id,
         "email": user.email,
         "session_token": session_token
     }
     
-    db.close()
-    
     return user_data
 
 
-def test_connect_google_requires_authentication():
+def test_connect_google_requires_authentication(client):
     """Test that /connect-google requires valid session token."""
     response = client.get("/api/v1/auth/connect-google")
     
     assert response.status_code == 401
 
 
-def test_connect_google_returns_oauth_url(test_user_with_session):
+def test_connect_google_returns_oauth_url(client, test_user_with_session):
     """Test that /connect-google returns OAuth authorization URL."""
     headers = {
         "Authorization": f"Bearer {test_user_with_session['session_token']}"
@@ -96,7 +75,7 @@ def test_connect_google_returns_oauth_url(test_user_with_session):
     assert "oauth2/auth" in data["authorization_url"]
 
 
-def test_google_connection_status_not_connected(test_user_with_session):
+def test_google_connection_status_not_connected(client, test_user_with_session):
     """Test connection status for user without OAuth tokens."""
     headers = {
         "Authorization": f"Bearer {test_user_with_session['session_token']}"
@@ -113,10 +92,8 @@ def test_google_connection_status_not_connected(test_user_with_session):
     assert data["has_calendar_scope"] is False
 
 
-def test_google_connection_status_connected():
+def test_google_connection_status_connected(client, db_session):
     """Test connection status for user with OAuth tokens."""
-    db = TestingSessionLocal()
-    
     # Create user with OAuth tokens
     user = User(
         user_id="test_user_connected",
@@ -127,11 +104,10 @@ def test_google_connection_status_connected():
         google_scopes="https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/calendar",
         last_login_at=datetime.utcnow()
     )
-    db.add(user)
-    db.commit()
+    db_session.add(user)
+    db_session.commit()
     
-    session_token = create_user_session(db, user.user_id)
-    db.close()
+    session_token = create_user_session(db_session, user.user_id)
     
     headers = {
         "Authorization": f"Bearer {session_token}"
@@ -150,7 +126,7 @@ def test_google_connection_status_connected():
 
 @patch('app.api.endpoints.auth.Flow')
 @patch('app.api.endpoints.auth.build')
-def test_callback_connect_flow(mock_build, mock_flow_class, test_user_with_session):
+def test_callback_connect_flow(mock_build, mock_flow_class, client, db_session, test_user_with_session):
     """Test OAuth callback for connect flow (with user_id in state)."""
     # Mock OAuth flow
     mock_flow = MagicMock()
@@ -193,20 +169,15 @@ def test_callback_connect_flow(mock_build, mock_flow_class, test_user_with_sessi
     assert data["email"] == test_user_with_session["email"]
     
     # Verify user tokens were updated
-    db = TestingSessionLocal()
-    user = db.query(User).filter(User.user_id == test_user_with_session["user_id"]).first()
+    user = db_session.query(User).filter(User.user_id == test_user_with_session["user_id"]).first()
     
     assert user.google_access_token == "new_access_token"
     assert user.google_refresh_token == "new_refresh_token"
     assert user.google_scopes is not None
-    
-    db.close()
 
 
-def test_callback_connect_flow_email_mismatch():
+def test_callback_connect_flow_email_mismatch(client, db_session):
     """Test callback rejects connect flow if email doesn't match."""
-    db = TestingSessionLocal()
-    
     # Create user
     user = User(
         user_id="test_user_mismatch",
@@ -214,11 +185,10 @@ def test_callback_connect_flow_email_mismatch():
         name="Test User",
         last_login_at=datetime.utcnow()
     )
-    db.add(user)
-    db.commit()
+    db_session.add(user)
+    db_session.commit()
     
-    session_token = create_user_session(db, user.user_id)
-    db.close()
+    session_token = create_user_session(db_session, user.user_id)
     
     # Initiate connect flow
     headers = {"Authorization": f"Bearer {session_token}"}
@@ -256,7 +226,7 @@ def test_callback_connect_flow_email_mismatch():
         assert "Email mismatch" in response.json()["detail"]
 
 
-def test_callback_invalid_state():
+def test_callback_invalid_state(client):
     """Test callback rejects invalid state parameter."""
     response = client.get(
         "/api/v1/auth/callback?code=test_code&state=invalid_state"
@@ -266,7 +236,7 @@ def test_callback_invalid_state():
     assert "Invalid or missing state" in response.json()["detail"]
 
 
-def test_callback_expired_state(test_user_with_session):
+def test_callback_expired_state(client, test_user_with_session):
     """Test callback rejects expired state."""
     # Manually add expired state
     from app.api.endpoints.auth import _oauth_states
