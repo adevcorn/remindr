@@ -221,9 +221,12 @@ class NLPService:
         ]
         has_strong_event = any(kw in text_lower for kw in strong_event_keywords)
 
-        # If it's a TASK action, boost task score strongly
+        # If it's a TASK action, boost task score VERY strongly
+        # This should override any event keywords (e.g., "schedule meeting" is TASK, not EVENT)
         if has_task_action:
-            task_similarity += 0.25  # Strong boost for action verbs
+            task_similarity += 0.40  # VERY strong boost for action verbs
+            # Suppress event score if there's an action verb
+            event_similarity = max(0.0, event_similarity - 0.20)
 
         # If it has event keywords but NO action verb, and has time, it's likely an event
         elif has_strong_event and has_time:
