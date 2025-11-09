@@ -108,8 +108,8 @@ jobs:
         GOOGLE_APPLICATION_CREDENTIALS: /tmp/fake-credentials.json
         PYTHONPATH: .
       run: |
-        # Create fake Google credentials for tests
-        echo '{"type": "service_account", "project_id": "test"}' > /tmp/fake-credentials.json
+        # Create fake Google credentials for tests with required fields
+        echo '{"type": "service_account", "project_id": "test", "client_email": "test@test.iam.gserviceaccount.com", "token_uri": "https://oauth2.googleapis.com/token", "private_key_id": "test", "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAA\n-----END RSA PRIVATE KEY-----\n"}' > /tmp/fake-credentials.json
         # Run tests with coverage - fail build if tests fail
         pytest --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html
     
