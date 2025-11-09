@@ -8,8 +8,13 @@ from typing import List
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.schemas.capture import (CaptureCreate, CaptureResponse,
-                                     DraftConfirm, DraftResponse, SyncStatus)
+from app.api.schemas.capture import (
+    CaptureCreate,
+    CaptureResponse,
+    DraftConfirm,
+    DraftResponse,
+    SyncStatus,
+)
 from app.core.auth import get_current_user_credentials, get_current_user_id
 from app.core.config import settings
 from app.db.session import get_db
