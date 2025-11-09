@@ -190,6 +190,9 @@ async def authenticate_with_google_token(
             name=user.name,
         )
 
+    except HTTPException:
+        # Re-raise HTTPException as-is (don't wrap with 500)
+        raise
     except ValueError as e:
         # Invalid token
         raise HTTPException(
