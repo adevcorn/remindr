@@ -181,7 +181,23 @@ class NLPService:
         has_time = self._has_time_pattern(text)
 
         # Task action verbs - things you need to DO
-        # If text starts with these, it's almost always a TASK, even with time
+        # Note keywords - highest priority to avoid conflicts with action verbs
+        note_keywords = ["remember", "note to", "don't forget", "keep in mind", "important:"]
+        has_note_keyword = any(kw in text_lower for kw in note_keywords)
+
+        # Event indicators - things you will ATTEND (not actions to do)
+        # Check for specific event phrases BEFORE checking generic action verbs
+        strong_event_keywords = [
+            "meeting",
+            "appointment",
+            "conference call",  # Must check BEFORE "call" action verb
+            "lunch with",
+            "dinner with",
+            "party",
+        ]
+        has_strong_event = any(kw in text_lower for kw in strong_event_keywords)
+
+        # Task action verbs - verbs that indicate something YOU need to DO
         task_action_verbs = [
             "buy",
             "send",
@@ -196,7 +212,7 @@ class NLPService:
             "create",
             "verify",
             "check",
-            "call",  # "Call dentist at 2pm" = TASK (you need to make the call)
+            "call",  # "Call dentist" = TASK, but "Conference call" = EVENT (checked above)
             "schedule",  # "Schedule meeting" = TASK (you need to schedule it)
             "book",  # "Book appointment" = TASK (you need to book it)
             "email",
@@ -209,38 +225,34 @@ class NLPService:
             for kw in task_action_verbs
         )
 
-        # Event indicators - things you will ATTEND
-        # These are events if NO action verb precedes them
-        strong_event_keywords = [
-            "meeting",
-            "appointment",
-            "conference",
-            "lunch with",
-            "dinner with",
-            "party",
-        ]
-        has_strong_event = any(kw in text_lower for kw in strong_event_keywords)
+        # Organizing verbs that ALWAYS indicate TASK even with event keywords
+        # "Schedule meeting", "Book appointment" are tasks to DO, not events to attend
+        organizing_verbs = ["schedule", "book", "arrange", "organize", "plan"]
+        has_organizing_verb = any(
+            text_lower.startswith(kw) or f" {kw} " in text_lower
+            for kw in organizing_verbs
+        )
 
         # Rule-based classification with explicit precedence
-        # Priority 1: Task action verbs ALWAYS indicate TASK
-        # "Call dentist", "Schedule meeting", "Buy groceries" are all TASKs
-        if has_task_action:
-            draft_type = DraftType.TASK
-            confidence = min(task_similarity + 0.20, 1.0)  # Boost confidence
-
-        # Priority 2: Note keywords indicate NOTE
-        elif has_note_keyword := any(
-            kw in text_lower
-            for kw in ["remember", "note", "don't forget", "keep in mind", "important:"]
-        ):
+        # Priority 1: Note keywords ALWAYS indicate NOTE (to avoid "note: check..." being a task)
+        if has_note_keyword:
             draft_type = DraftType.NOTE
             confidence = min(note_similarity + 0.15, 1.0)
 
-        # Priority 3: Event keywords + time = EVENT
-        # Only if NO action verb and NO note keyword
+        # Priority 2: Organizing verbs ALWAYS indicate TASK (even with event keywords)
+        elif has_organizing_verb:
+            draft_type = DraftType.TASK
+            confidence = min(task_similarity + 0.20, 1.0)
+
+        # Priority 3: Event keywords + time = EVENT (if no organizing verb)
         elif has_strong_event and has_time:
             draft_type = DraftType.EVENT
             confidence = min(event_similarity + 0.20, 1.0)
+
+        # Priority 4: Other task action verbs indicate TASK
+        elif has_task_action:
+            draft_type = DraftType.TASK
+            confidence = min(task_similarity + 0.20, 1.0)
 
         # Fallback: Use highest similarity score
         else:
@@ -263,7 +275,8 @@ class NLPService:
 
     def _has_time_pattern(self, text: str) -> bool:
         """Check if text contains time patterns."""
-        time_pattern = r"(?:at|@)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?"
+        # Match: "at 2pm", "at 9:30am", "at noon", "@3pm", "at midnight"
+        time_pattern = r"(?:at|@)\s*(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midnight)"
         return bool(re.search(time_pattern, text.lower()))
 
     async def _extract_entities_async(self, text: str) -> Dict[str, Any]:
