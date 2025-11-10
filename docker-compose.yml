@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: remindr-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-remindr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-remindr}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-remindr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - remindr-network
+
+  # Backend API (with native async background tasks, no Celery)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: remindr-backend
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-remindr}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-remindr}
+      SECRET_KEY: ${SECRET_KEY}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.85}
+      SYNC_RETRY_MAX_ATTEMPTS: ${SYNC_RETRY_MAX_ATTEMPTS:-5}
+      SYNC_RETRY_BACKOFF_BASE: ${SYNC_RETRY_BACKOFF_BASE:-2}
+      API_V1_PREFIX: /api/v1
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-./credentials/service-account.json}:/app/credentials/service-account.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - remindr-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  remindr-network:
+    driver: bridge

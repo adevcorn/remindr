@@ -1,0 +1,75 @@
+# Remindr MVP Requirements and Acceptance Criteria
+
+## Finalized Requirements
+
+### Supported Languages
+- **Requirement**: English only for MVP.
+- **Rationale**: Simplifies AI model integration and reduces scope.
+
+### Image Capture/OCR
+- **Requirement**: Support both handwriting and printed text.
+- **Rationale**: Ensures inclusivity for diverse user inputs.
+
+### AI Model/Service
+- **Requirement**: Use the best available services for speech-to-text and OCR (e.g., Google Vertex AI, Google Vision API).
+- **Rationale**: Prioritizes accuracy and reliability.
+
+### Google Integration
+- **Requirement**: Support personal Google accounts only.
+- **Rationale**: Focuses on individual users for MVP; simplifies OAuth 2.0 setup.
+
+### Task/Event Confirmation
+- **Requirement**: Require user confirmation only when AI confidence is low.
+- **Rationale**: Balances automation with user control.
+
+### Offline Storage
+- **Requirement**: Use local device storage for offline queue (no cloud backup needed).
+- **Rationale**: Simplifies architecture and ensures privacy.
+
+### Analytics Privacy
+- **Requirement**: Use standard anonymized analytics.
+- **Rationale**: Meets baseline privacy standards without additional complexity.
+
+---
+
+## Acceptance Criteria
+
+### Supported Languages
+1. The app must process and interpret inputs in English.
+2. Non-English inputs must result in a clear error or fallback message.
+
+### Image Capture/OCR
+1. The app must extract text from both handwritten and printed images.
+2. OCR accuracy must meet or exceed 90% for legible inputs.
+3. Users must be able to confirm or discard extracted tasks/events.
+
+### AI Model/Service
+1. Speech-to-text must achieve transcription latency under 1 second for 10-second audio clips.
+2. OCR processing must complete within 3 seconds for standard images.
+3. AI classification accuracy must meet or exceed 90%.
+
+### Google Integration
+1. Users must authenticate via Google OAuth 2.0.
+2. Tasks and events must sync successfully with Google Tasks and Calendar.
+3. Sync latency must not exceed 10 seconds under normal conditions.
+
+### Task/Event Confirmation
+1. AI confidence thresholds must be configurable (default: 0.85).
+2. Inputs with confidence below the threshold must prompt user confirmation.
+3. Confirmed tasks/events must sync automatically.
+
+### Offline Storage
+1. Tasks/events captured offline must queue locally.
+2. The app must retry syncing automatically when reconnected.
+3. Users must see a clear status indicator for offline/queued tasks.
+
+### Analytics Privacy
+1. Analytics must exclude personally identifiable information (PII).
+2. Users must have access to a privacy policy detailing data usage.
+3. All analytics must comply with GDPR standards.
+
+---
+
+## Notes
+- These requirements and criteria align with the finalized MVP scope.
+- Future enhancements (e.g., multi-language support, team sharing) are out of scope for this phase.

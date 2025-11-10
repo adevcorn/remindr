@@ -1,0 +1,116 @@
+# Celery Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remindr-celery-worker
+  labels:
+    app: remindr
+    component: celery-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: remindr
+      component: celery-worker
+  template:
+    metadata:
+      labels:
+        app: remindr
+        component: celery-worker
+    spec:
+      containers:
+      - name: celery-worker
+        image: gcr.io/PROJECT_ID/remindr-backend:latest
+        command: ["celery", "-A", "app.services.tasks", "worker", "--loglevel=info", "--concurrency=4"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: remindr-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: remindr-secrets
+              key: redis-url
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: remindr-secrets
+              key: secret-key
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/secrets/google/service-account.json
+        - name: GOOGLE_CLOUD_PROJECT
+          valueFrom:
+            configMapKeyRef:
+              name: remindr-config
+              key: google-cloud-project
+        - name: AI_CONFIDENCE_THRESHOLD
+          valueFrom:
+            configMapKeyRef:
+              name: remindr-config
+              key: ai-confidence-threshold
+        volumeMounts:
+        - name: google-credentials
+          mountPath: /var/secrets/google
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: google-credentials
+        secret:
+          secretName: google-service-account
+
+---
+# Celery Beat Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remindr-celery-beat
+  labels:
+    app: remindr
+    component: celery-beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: remindr
+      component: celery-beat
+  template:
+    metadata:
+      labels:
+        app: remindr
+        component: celery-beat
+    spec:
+      containers:
+      - name: celery-beat
+        image: gcr.io/PROJECT_ID/remindr-backend:latest
+        command: ["celery", "-A", "app.services.tasks", "beat", "--loglevel=info"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: remindr-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: remindr-secrets
+              key: redis-url
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: remindr-secrets
+              key: secret-key
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
