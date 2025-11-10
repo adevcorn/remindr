@@ -168,7 +168,6 @@ jobs:
       working-directory: backend
       env:
         DATABASE_URL: sqlite:///./test.db
-        REDIS_URL: redis://localhost:6379/0
         SECRET_KEY: test-secret-key
         AI_CONFIDENCE_THRESHOLD: 0.85
       run: |
