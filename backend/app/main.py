@@ -20,8 +20,14 @@ from app.models.user import User  # noqa: F401
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-# Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+# Initialize rate limiter with storage backend
+# Use Redis if available, otherwise fall back to in-memory storage
+storage_uri = settings.REDIS_URL if settings.REDIS_URL else "memory://"
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["100/minute"],
+    storage_uri=storage_uri,
+)
 
 # Initialize FastAPI app
 app = FastAPI(

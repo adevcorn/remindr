@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/remindr"
 
+    # Redis (optional - falls back to in-memory if not set)
+    REDIS_URL: str = ""
+
     # Google Cloud
     GOOGLE_APPLICATION_CREDENTIALS: str = ""
     GOOGLE_CLOUD_PROJECT: str = ""
